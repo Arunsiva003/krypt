@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import AppBar from '@mui/material/AppBar';
 import Box from '@mui/material/Box';
 import Toolbar from '@mui/material/Toolbar';
@@ -14,12 +15,13 @@ import MenuItem from '@mui/material/MenuItem';
 import AdbIcon from '@mui/icons-material/Adb';
 
 const pages = ['Home', 'Tools', 'Encryptions'];
+const navLinks = ['/home', '#','/encryptions'];
 const settings = ['Profile', 'Account', 'Dashboard', 'Logout'];
 
 function Navbar() {
   const [anchorElNav, setAnchorElNav] = useState(null);
   const [anchorElUser, setAnchorElUser] = useState(null);
-
+  const navigate = useNavigate();
   const handleOpenNavMenu = (event) => {
     setAnchorElNav(event.currentTarget);
   };
@@ -30,6 +32,7 @@ function Navbar() {
   };
 
   const handleCloseNavMenu = () => {
+    navigate('/home');
     setAnchorElNav(null);
   };
 
@@ -89,9 +92,13 @@ function Navbar() {
                 display: { xs: 'block', md: 'none' },
               }}
             >
-              {pages.map((page) => (
+              {pages.map((page,ind) => (
                 <MenuItem key={page} onClick={handleCloseNavMenu}>
-                  <Typography textAlign="center">{page}</Typography>
+                <Typography textAlign="center">
+                  <Link to={navLinks[ind]}>
+                      {page}
+                      </Link>
+                      </Typography>
                 </MenuItem>
               ))}
             </Menu>
@@ -118,13 +125,13 @@ function Navbar() {
           </Typography>
 
           <Box sx={{ flexGrow: 1, display: { xs: 'none', md: 'flex' } }}>
-            {pages.map((page) => (
+            {pages.map((page, ind) => (
               <Button
                 key={page}
-                onClick={handleCloseNavMenu}
+                onClick={()=>{navigate(`${navLinks[ind]}`)}}/*-----------------------*/
                 sx={{ my: 2, color: 'white', display: 'block' }}
               >
-                {page}
+                {page}1
               </Button>
             ))}
           </Box>

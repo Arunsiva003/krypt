@@ -1,0 +1,9 @@
+services:
+  rustapp:
+    container_name: kryptbackend
+    image: halfhearted/kryptbackend:latest
+    build:
+      context: ./backend
+      dockerfile: rust.dockerfile
+    ports:
+      - 8080:8080

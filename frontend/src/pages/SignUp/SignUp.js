@@ -1,5 +1,6 @@
 import * as React from 'react';
 import { Link } from 'react-router-dom';
+import axios from 'axios';
 import Avatar from '@mui/material/Avatar';
 import Button from '@mui/material/Button';
 import CssBaseline from '@mui/material/CssBaseline';
@@ -31,15 +32,35 @@ function Copyright(props) {
 const defaultTheme = createTheme();
 
 export default function SignUp() {
+
+  React.useEffect(()=>{
+    axios.get("http://localhost:8080/api/rust/users")
+    .then((res)=>console.log(res.data));
+  },[])
+
+
+
+
   const handleSubmit = (event) => {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
-    console.log({
-      firstName: data.get('firstName'),
-      lastName: data.get('lastName'),
-      email: data.get('email'),
-      password: data.get('password'),
-    });
+    
+    const firstName = data.get('firstName');
+    const lastName = data.get('lastName');
+    const email = data.get('email');
+    const username = data.get('username');
+    const password = data.get('password');
+    
+    axios.post("http://localhost:8080/api/rust/users", {
+      firstname:firstName,
+      lastname:lastName,
+      username,
+      email,
+      password
+    })
+        .then((response) => console.log(response.data)) // Corrected: use response instead of err
+        .catch((err) => console.log(err));
+
   };
 
   return (

@@ -31,9 +31,9 @@ function App() {
           <Navbar />
           <div className='content'>
             <Routes>
-              <Route path='/login' element={<Login />} />
+              <Route path='/' element={<Login />} />
               <Route path='/signup' element={<SignUp />} />
-              <Route path='/' element={<Home />} />
+              <Route path='/home' element={<Home />} />
               <Route path='/krypt/:name' element={<Krypt />} />
               {/* Add a default route or a 404 page if needed */}
               <Route path='*' element={<NotFound />} />
