@@ -1,6 +1,7 @@
 import React from "react";
 import {useParams} from "react-router-dom"
 import Steganography from "../../components/Steganography/Steganography";
+import TextEncrypt from "../../components/TextEncryption/TextEncypt";
 
 const Krypt = () =>{
     const kryptType = useParams().name;
@@ -12,7 +13,7 @@ const Krypt = () =>{
             }
 
             {kryptType==="textToText" ?
-                "waiting" : null    
+                <TextEncrypt/>: null    
             }
          
         </div>
