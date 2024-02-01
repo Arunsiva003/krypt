@@ -34,6 +34,7 @@ fn main() {
     for stream in listener.incoming() {
         match stream {
             Ok(stream) => {
+                println!("stream  listening");
                 handle_client(stream);
             }
             Err(e) => {
@@ -63,11 +64,12 @@ fn set_database() -> Result<(), postgres::Error> {
 fn handle_client(mut stream: TcpStream) {
     let mut buffer = [0; 1024];
     let mut request = String::new();
-
+    println!("request: {}",request);
     match stream.read(&mut buffer) {
         Ok(size) => {
             request.push_str(String::from_utf8_lossy(&buffer[..size]).as_ref());
-
+            println!("upd request: {}",request);
+            
             let (status_line, content) = match &*request {
                 r if r.starts_with("OPTIONS ") => (OK_RESPONSE.to_string(), "".to_string()),
                 r if r.starts_with("POST /api/rust/users/login") => handle_login_request(r),
@@ -77,6 +79,7 @@ fn handle_client(mut stream: TcpStream) {
             };
 
             let response = format!("{}{}", status_line, content);
+            println!("\nresponse:{}\n",response);
             stream.write_all(response.as_bytes()).unwrap();
         }
         Err(e) => eprintln!("Unable to read stream: {}", e),
@@ -142,6 +145,7 @@ fn handle_get_all_request(_request: &str) -> (String, String) {
 fn handle_login_request(request: &str) -> (String, String) {
     
     let request = request.split("\r\n\r\n").last().unwrap_or_default();
+    println!("inside hnadlelogin {}",request);
     match serde_json::from_str::<serde_json::Value>(&request) {
         Ok(request_json) => {
             // Extract email and password from the JSON request
@@ -156,11 +160,13 @@ fn handle_login_request(request: &str) -> (String, String) {
                     match Client::connect(DB_URL, NoTls) {
                         Ok(mut client) => {
                             // Check if the provided email and password match any user in the database
+                            println!("before validation: {},{}",email,password);
                             match client.query_opt(
                                 "SELECT id, firstname, lastname, username, email, password FROM users WHERE email = $1 AND password = $2",
                                 &[&email, &password],
                             ) {
                                 Ok(Some(row)) => {
+                                    println!("############validated#############");
                                     let authenticated_user = User {
                                         id: row.get(0),
                                         firstname: row.get(1),

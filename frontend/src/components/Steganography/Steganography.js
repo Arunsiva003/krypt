@@ -11,10 +11,18 @@ const Steganography = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [operation, setOperation] = useState("encrypt");
   const [showDownloadButton, setShowDownloadButton] = useState(false);
+  const [passkey, setPasskey] = useState('');
 
   const encodeMessage = async () => {
     try {
       setIsLoading(true);
+
+      // Check if passkey is provided
+      if (!passkey) {
+        alert('Please enter a passkey.');
+        setIsLoading(false);
+        return;
+      }
 
       const image = new Image();
       image.src = imageSrc;
@@ -40,8 +48,14 @@ const Steganography = () => {
           .map((char) => char.charCodeAt(0).toString(2).padStart(8, '0'))
           .join('');
 
+        // Use passkey for additional encryption
+        const passkeyBinary = passkey
+          .split('')
+          .map((char) => char.charCodeAt(0).toString(2).padStart(8, '0'))
+          .join('');
+
         for (let i = 0; i < binaryMessage.length; i++) {
-          pixels[i * 4] = (pixels[i * 4] & 0b11111110) | parseInt(binaryMessage[i], 2);
+          pixels[i * 4] = (pixels[i * 4] & 0b11111110) | ((parseInt(binaryMessage[i], 2) + parseInt(passkeyBinary[i % passkeyBinary.length], 2)) % 2);
         }
 
         context.putImageData(imageData, 0, 0);
@@ -69,6 +83,13 @@ const Steganography = () => {
     try {
       setIsLoading(true);
 
+      // Check if passkey is provided
+      if (!passkey) {
+        alert('Please enter a passkey.');
+        setIsLoading(false);
+        return;
+      }
+
       const image = new Image();
       image.src = imageSrc;
 
@@ -89,9 +110,20 @@ const Steganography = () => {
           binaryMessage += (pixels[i] & 1).toString();
         }
 
+        // Use passkey for decryption
+        const passkeyBinary = passkey
+          .split('')
+          .map((char) => char.charCodeAt(0).toString(2).padStart(8, '0'))
+          .join('');
+
+        let decryptedBinaryMessage = '';
+        for (let i = 0; i < binaryMessage.length; i++) {
+          decryptedBinaryMessage += ((parseInt(binaryMessage[i], 2) - parseInt(passkeyBinary[i % passkeyBinary.length], 2)) + 2) % 2;
+        }
+
         let message = '';
-        for (let i = 0; i < binaryMessage.length; i += 8) {
-          message += String.fromCharCode(parseInt(binaryMessage.slice(i, i + 8), 2));
+        for (let i = 0; i < decryptedBinaryMessage.length; i += 8) {
+          message += String.fromCharCode(parseInt(decryptedBinaryMessage.slice(i, i + 8), 2));
         }
 
         let match = message.match(/\{(\d+)\}/);
@@ -128,7 +160,7 @@ const Steganography = () => {
     link.click();
   };
 
-  const handleTextDownload = () =>{
+  const handleTextDownload = () => {
     window.location.href = '/success';
     const blob = new Blob([decodedMessage], { type: 'text/plain' });
     const link = document.createElement('a');
@@ -165,17 +197,34 @@ const Steganography = () => {
           <div>
             <label>{operation === 'encrypt' ? 'Enter Message:' : 'Choose Image:'}</label>
             {operation === 'encrypt' ? (
-                <div>
-              <textarea
-                value={message}
-                onChange={(e) => {
-                  setMessage(e.target.value);
-                }}
-              />
-              <div className="choose-image-container">
-                <label htmlFor="choose-image" className="choose-image-label">
-                  Choose Image:
-                </label>
+              <div>
+                <textarea
+                  value={message}
+                  onChange={(e) => {
+                    setMessage(e.target.value);
+                  }}
+                />
+                <div className="choose-image-container">
+                  <label htmlFor="choose-image" className="choose-image-label">
+                    Choose Image:
+                  </label>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    id="choose-image"
+                    className="choose-image-input"
+                    onChange={(e) => setImageSrc(URL.createObjectURL(e.target.files[0]))}
+                  />
+                  <label htmlFor="choose-image" className="choose-image-button">
+                    <BsCloudUpload style={{ marginRight: '8px' }} />
+                    Select Image e
+                  </label>
+                </div>
+              </div>
+            ) : (
+              <div className="drop-container">
+                <span className="drop-title">Drop files here</span>
+                OR
                 <input
                   type="file"
                   accept="image/*"
@@ -185,38 +234,28 @@ const Steganography = () => {
                 />
                 <label htmlFor="choose-image" className="choose-image-button">
                   <BsCloudUpload style={{ marginRight: '8px' }} />
-                  Select Image e
-                </label>
-              </div>
-            </div>
-            ) : (
-                <div className="drop-container">
-                  <span className="drop-title">Drop files here</span>
-                  OR
-              <input
-                type="file"
-                accept="image/*"
-                id="choose-image"
-                className="choose-image-input"
-                onChange={(e) => setImageSrc(URL.createObjectURL(e.target.files[0]))}
-              />
-              <label htmlFor="choose-image" className="choose-image-button">
-                  <BsCloudUpload style={{ marginRight: '8px' }} />
                   Select Image d
                 </label>
-
               </div>
             )}
+          </div>
+          <div style={{margin:"10px"}}>
+            <label>Passkey: </label>
+            <input
+              type="password"
+              value={passkey}
+              onChange={(e) => setPasskey(e.target.value)}
+            />
           </div>
           <div className='operationButton'>
             <button
               onClick={operation === 'encrypt' ? encodeMessage : decodeMessage}
               disabled={isLoading}
-            >
+              >
               {isLoading ? `${operation === 'encrypt' ? 'Encrypting...' : 'Decrypting...'}` : operation === 'encrypt' ? 'Encrypt Message' : 'Decrypt Message'}
             </button>
             {showDownloadButton && (
-              <button onClick={operation==="encrypt"?handleImageDownload : handleTextDownload} className="download-button">
+              <button onClick={operation === "encrypt" ? handleImageDownload : handleTextDownload} className="download-button">
                 Download
               </button>
             )}

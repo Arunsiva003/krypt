@@ -1,4 +1,4 @@
-import * as React from 'react';
+import React , {useContext} from 'react';
 import {Link, useNavigate} from "react-router-dom";
 import Avatar from '@mui/material/Avatar';
 import Button from '@mui/material/Button';
@@ -13,8 +13,10 @@ import Typography from '@mui/material/Typography';
 import Container from '@mui/material/Container';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import axios from 'axios';
+import UserContext from '../../UserContext';
 
 function Copyright(props) {
+
   return (
     <Typography variant="body2" color="text.secondary" align="center" {...props}>
       {'Copyright © '}
@@ -29,7 +31,11 @@ function Copyright(props) {
 
 const defaultTheme = createTheme();
 
-export default function Login() {
+const Login = () => {
+
+  const {user,setUser} = useContext(UserContext);
+  console.log("user:",user);
+  const { firstname = '', lastname = '', username = '', email = '', password = '' } = user || {};
 
   const navigate = useNavigate();
   const handleSubmit = (event) => {
@@ -43,12 +49,12 @@ export default function Login() {
       password
     })
     .then((res)=>{
-      navigate("/home");
+      setUser(res.data);
       console.log(res);
+      navigate("/");
     })
     .catch((err)=>{
       alert("Invalid username or password");
-      console.log(err);
     })
 
   };
@@ -123,3 +129,5 @@ export default function Login() {
     </ThemeProvider>
   );
 }
+
+export default Login;

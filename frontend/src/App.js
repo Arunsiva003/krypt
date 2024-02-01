@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useContext } from 'react';
 import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
@@ -7,6 +7,8 @@ import SignUp from './pages/SignUp/SignUp';
 import Home from './pages/Home/Home';
 import Navbar from './components/Navbar/Navbar';
 import Krypt from './pages/Krypt/Krypt';
+import UserContext from './UserContext';
+
 
 // const theme = createTheme({
 //   palette: {
@@ -23,6 +25,12 @@ import Krypt from './pages/Krypt/Krypt';
 // });
 
 function App() {
+
+  const {user} = useContext(UserContext);
+  const isLogged = user;
+  console.log("User from app:",user);
+
+
   return (
     // <ThemeProvider theme={theme}>
       // <CssBaseline />
@@ -31,7 +39,7 @@ function App() {
           <Navbar />
           <div className='content'>
             <Routes>
-              <Route path='/' element={<Login />} />
+              <Route path='/' element={user==null ? <Login /> : <Home/>} />
               <Route path='/signup' element={<SignUp />} />
               <Route path='/home' element={<Home />} />
               <Route path='/krypt/:name' element={<Krypt />} />

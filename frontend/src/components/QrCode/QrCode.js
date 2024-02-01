@@ -40,7 +40,7 @@ const QRCodeComponent = () => {
       <TextField
         label="Enter Secret Key"
         variant="outlined"
-        fullWidth
+        // fullWidth
         margin="normal"
         value={secretKey}
         onChange={(e) => setSecretKey(e.target.value)}
@@ -49,6 +49,8 @@ const QRCodeComponent = () => {
         label="Enter Message"
         variant="outlined"
         fullWidth
+        multiline
+        style={{maxHeight:"250px",overflowY:"scroll"}}
         margin="normal"
         value={message}
         onChange={(e) => setMessage(e.target.value)}
