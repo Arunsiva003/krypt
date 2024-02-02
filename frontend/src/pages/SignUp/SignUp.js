@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import Avatar from '@mui/material/Avatar';
 import Button from '@mui/material/Button';
@@ -32,14 +32,12 @@ function Copyright(props) {
 const defaultTheme = createTheme();
 
 export default function SignUp() {
-
-  React.useEffect(()=>{
-    axios.get("http://localhost:8080/api/rust/users")
-    .then((res)=>console.log(res.data));
-  },[])
-
-
-
+  const navigate =useNavigate();
+  
+  // React.useEffect(()=>{
+  //   axios.get("http://localhost:8080/api/rust/users")
+  //   .then((res)=>console.log(res.data));
+  // },[])
 
   const handleSubmit = (event) => {
     event.preventDefault();
@@ -58,8 +56,8 @@ export default function SignUp() {
       email,
       password
     })
-        .then((response) => console.log(response.data)) // Corrected: use response instead of err
-        .catch((err) => console.log(err));
+        .then((response) =>navigate('/')) 
+        .catch((err) => alert("invalid User..."));
 
   };
 
@@ -150,7 +148,7 @@ export default function SignUp() {
             </Button>
             <Grid container justifyContent="flex-end">
               <Grid item>
-                <Link to="/login"  variant="body2">
+                <Link to="/"  variant="body2">
                   Already have an account? Sign in
                 </Link>
               </Grid>

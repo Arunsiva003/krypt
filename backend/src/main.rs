@@ -16,7 +16,7 @@ struct User {
     password: String,
 }
 
-const DB_URL: &str = "postgres://postgres:020308@localhost:5432/temp";
+const DB_URL: &str = "postgresql://uu09n2xc646nt4vczmt7:bTb9GyWabKOZ5h499cnEeIZXMSzt8x@b3ix8fekyxlm55qvgxtk-postgresql.services.clever-cloud.com:50013/b3ix8fekyxlm55qvgxtk";
 const OK_RESPONSE: &str = "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods:POST, GET, PUT, DELETE\r\nAccess-Control-Allow-Headers: Content-Type\r\n\r\n";
 const NOT_FOUND: &str = "HTTP/1.1 404 NOT FOUND\r\n\r\n";
 const INTERNAL_ERROR: &str = "HTTP/1.1 500 INTERNAL ERROR\r\n\r\n";
@@ -79,7 +79,7 @@ fn handle_client(mut stream: TcpStream) {
             };
 
             let response = format!("{}{}", status_line, content);
-            println!("\nresponse:{}\n",response);
+            println!("\nresponse in handleClient:{}\n",response);
             stream.write_all(response.as_bytes()).unwrap();
         }
         Err(e) => eprintln!("Unable to read stream: {}", e),
@@ -87,37 +87,62 @@ fn handle_client(mut stream: TcpStream) {
 }
 
 fn handle_post_request(request: &str) -> (String, String) {
-    match (get_user_request_body(request), Client::connect(DB_URL, NoTls)) {
-        (Ok(user), Ok(mut client)) => {
-            println!("ok{:?}",user);
-            let row = client
-                .query_one(
+    match get_user_request_body(request) {
+        Ok(user) => {
+            // Establish a connection to the database
+            let mut client = match Client::connect(DB_URL, NoTls) {
+                Ok(client) => client,
+                Err(_) => return (INTERNAL_ERROR.to_string(), "Internal error".to_string()),
+            };
+
+            // Check if email and username are not already present
+            if is_email_username_available(&user.email, &user.username, &mut client) {
+                // Insert the user into the database
+                match client.query_one(
                     "INSERT INTO users (firstname, lastname, username, email, password) VALUES ($1, $2, $3, $4, $5) RETURNING id",
-                    &[&user.firstname, &user.lastname, &user.username, &user.email, &user.password,]
-                )
-                .unwrap();
+                    &[&user.firstname, &user.lastname, &user.username, &user.email, &user.password]
+                ) {
+                    Ok(row) => {
+                        let user_id: i32 = row.get(0);
 
-            let user_id: i32 = row.get(0);
+                        match client.query_one(
+                            "SELECT id, firstname, lastname, username, email, password FROM users WHERE id = $1",
+                            &[&user_id],
+                        ) {
+                            Ok(row) => {
+                                let user = User {
+                                    id: row.get(0),
+                                    firstname: row.get(1),
+                                    lastname: row.get(2),
+                                    username: row.get(3),
+                                    email: row.get(4),
+                                    password: row.get(5),
+                                };
 
-            match client.query_one("SELECT id, firstname, lastname, username, email, password FROM users WHERE id = $1", &[&user_id]) {
-                Ok(row) => {
-                    let user = User {
-                        id: row.get(0),
-                        firstname: row.get(1),
-                        lastname: row.get(2),
-                        username: row.get(3),
-                        email: row.get(4),
-                        password: row.get(5),
-                    };
-
-                    (OK_RESPONSE.to_string(), serde_json::to_string(&user).unwrap())
+                                return (OK_RESPONSE.to_string(), serde_json::to_string(&user).unwrap());
+                            }
+                            Err(_) => return (INTERNAL_ERROR.to_string(), "Failed to retrieve created user".to_string()),
+                        }
+                    }
+                    Err(_) => return (INTERNAL_ERROR.to_string(), "Failed to insert user".to_string()),
                 }
-                Err(_) => (INTERNAL_ERROR.to_string(), "Failed to retrieve created user".to_string()),
+            } else {
+                // User with the given email or username already exists
+                return (NOT_FOUND.to_string(),"User with the given email or username already exists".to_string());
             }
         }
-        _ => (INTERNAL_ERROR.to_string(), "Internal error".to_string()),
+        _ => return (INTERNAL_ERROR.to_string(), "Internal error".to_string()),
     }
 }
+
+fn is_email_username_available(email: &str, username: &str, client: &mut Client) -> bool {
+    // Check if email or username already exists
+    match client.query_opt("SELECT 1 FROM users WHERE email = $1 OR username = $2 LIMIT 1", &[&email, &username]) {
+        Ok(Some(_)) => false, // Email or username already exists
+        _ => true, // Email and username are available
+    }
+}
+
 
 fn handle_get_all_request(_request: &str) -> (String, String) {
     match Client::connect(DB_URL, NoTls) {

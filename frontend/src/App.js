@@ -1,5 +1,5 @@
 import React, { useContext } from 'react';
-import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
+import { BrowserRouter as Router, Route, Routes, useNavigate } from 'react-router-dom';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import Login from './pages/Login/login'
@@ -8,6 +8,7 @@ import Home from './pages/Home/Home';
 import Navbar from './components/Navbar/Navbar';
 import Krypt from './pages/Krypt/Krypt';
 import UserContext from './UserContext';
+import ImageEncrypt from "./components/ImageEncrypt/ImageEncrypt"
 
 
 // const theme = createTheme({
@@ -38,14 +39,23 @@ function App() {
         <div className='App'>
           <Navbar />
           <div className='content'>
-            <Routes>
-              <Route path='/' element={user==null ? <Login /> : <Home/>} />
-              <Route path='/signup' element={<SignUp />} />
-              <Route path='/home' element={<Home />} />
-              <Route path='/krypt/:name' element={<Krypt />} />
-              {/* Add a default route or a 404 page if needed */}
-              <Route path='*' element={<NotFound />} />
-            </Routes>
+
+
+            {user==null ? 
+              <Routes>
+                  <Route path='/' element={<Login/>}/>
+                  <Route path='/signup' element={<Login/>}/>
+                  <Route path='*' element={<NotFound/>} />
+              </Routes>
+              :
+              <Routes>
+                <Route path='/' element={<Home/>} />
+                <Route path='/home' element={<Home />} />
+                <Route path='/krypt/:name' element={<Krypt />} />
+                <Route path='/imagek' element={<ImageEncrypt />} />
+                <Route path='*' element={<NotFound />} />
+              </Routes>
+            }
           </div>
         </div>
       </Router>
@@ -55,7 +65,8 @@ function App() {
 
 // Example 404 (Not Found) component
 const NotFound = () => {
-  return <div>404 - Not Found</div>;
+  const navigate = useNavigate();
+  navigate('/');
 };
 
 export default App;
