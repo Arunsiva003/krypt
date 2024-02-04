@@ -70,9 +70,24 @@ fn handle_client(mut stream: TcpStream) {
         match stream.read(&mut buffer) {
             Ok(size) if size > 0 => {
                 request.push_str(String::from_utf8_lossy(&buffer[..size]).as_ref());
-                if size < BUFFER_SIZE {
-                    // We've reached the end of the request
-                    break;
+
+                // Check if we reached the end of the HTTP headers
+                if let Some(end_of_headers) = request.find("\r\n\r\n") {
+                    // Assume content length is specified in the headers
+                    let content_length = get_content_length(&request);
+
+                    // Check if the body is fully received based on content length
+                    if let Some(content_length) = content_length {
+                        let body_start = end_of_headers + 4; // Move past "\r\n\r\n"
+                        let expected_length = body_start + content_length as usize;
+
+                        if request.len() >= expected_length {
+                            break;
+                        }
+                    } else {
+                        // Content length not specified, so we assume it's the end of the request
+                        break;
+                    }
                 }
             }
             Ok(_) | Err(_) => break, // Error or no more data to read
@@ -93,6 +108,23 @@ fn handle_client(mut stream: TcpStream) {
     println!("\nresponse in handleClient:{}\n", response);
     stream.write_all(response.as_bytes()).unwrap();
 }
+
+fn get_content_length(request: &str) -> Option<u64> {
+    const CONTENT_LENGTH_HEADER: &str = "Content-Length: ";
+
+    if let Some(start_index) = request.find(CONTENT_LENGTH_HEADER) {
+        let end_index = request[start_index + CONTENT_LENGTH_HEADER.len()..].find('\r');
+        if let Some(end_index) = end_index {
+            let content_length_str = &request[start_index + CONTENT_LENGTH_HEADER.len()..start_index + CONTENT_LENGTH_HEADER.len() + end_index];
+            if let Ok(content_length) = content_length_str.parse::<u64>() {
+                return Some(content_length);
+            }
+        }
+    }
+
+    None
+}
+
 
 
 
