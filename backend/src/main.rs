@@ -17,7 +17,7 @@ struct User {
 }
 
 const DB_URL: &str = "postgresql://uu09n2xc646nt4vczmt7:bTb9GyWabKOZ5h499cnEeIZXMSzt8x@b3ix8fekyxlm55qvgxtk-postgresql.services.clever-cloud.com:50013/b3ix8fekyxlm55qvgxtk";
-const OK_RESPONSE: &str = "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods:POST, GET, PUT, DELETE\r\nAccess-Control-Allow-Headers: Content-Type\r\n\r\n";
+const OK_RESPONSE: &str = "HTTP/1.1 200 OK\r\nContent-Length: 200\r\nContent-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods:POST, GET, PUT, DELETE\r\nAccess-Control-Allow-Headers: Content-Type\r\n\r\n";
 const NOT_FOUND: &str = "HTTP/1.1 404 NOT FOUND\r\n\r\n";
 const INTERNAL_ERROR: &str = "HTTP/1.1 500 INTERNAL ERROR\r\n\r\n";
 
@@ -62,36 +62,52 @@ fn set_database() -> Result<(), postgres::Error> {
 }
 
 fn handle_client(mut stream: TcpStream) {
-    let mut buffer = [0; 1024];
+    const BUFFER_SIZE: usize = 4096;
+    let mut buffer = [0; BUFFER_SIZE];
     let mut request = String::new();
-    println!("request: {}",request);
-    match stream.read(&mut buffer) {
-        Ok(size) => {
-            request.push_str(String::from_utf8_lossy(&buffer[..size]).as_ref());
-            println!("upd request: {}",request);
-            
-            let (status_line, content) = match &*request {
-                r if r.starts_with("OPTIONS ") => (OK_RESPONSE.to_string(), "".to_string()),
-                r if r.starts_with("POST /api/rust/users/login") => handle_login_request(r),
-                r if r.starts_with("GET /api/rust/users") => handle_get_all_request(r),
-                r if r.starts_with("POST /api/rust/users") => handle_post_request(r),
-                _ => (NOT_FOUND.to_string(), "404 not found".to_string()),
-            };
 
-            let response = format!("{}{}", status_line, content);
-            println!("\nresponse in handleClient:{}\n",response);
-            stream.write_all(response.as_bytes()).unwrap();
+    loop {
+        match stream.read(&mut buffer) {
+            Ok(size) if size > 0 => {
+                request.push_str(String::from_utf8_lossy(&buffer[..size]).as_ref());
+                if size < BUFFER_SIZE {
+                    // We've reached the end of the request
+                    break;
+                }
+            }
+            Ok(_) | Err(_) => break, // Error or no more data to read
         }
-        Err(e) => eprintln!("Unable to read stream: {}", e),
     }
+
+    println!("Full request: {}", request);
+
+    let (status_line, content) = match &*request {
+        r if r.starts_with("OPTIONS ") => (OK_RESPONSE.to_string(), "".to_string()),
+        r if r.starts_with("POST /api/rust/users/login") => handle_login_request(r),
+        r if r.starts_with("GET /api/rust/users") => handle_get_all_request(r),
+        r if r.starts_with("POST /api/rust/users") => handle_post_request(r),
+        _ => (NOT_FOUND.to_string(), "404 not found".to_string()),
+    };
+
+    let response = format!("{}{}", status_line, content);
+    println!("\nresponse in handleClient:{}\n", response);
+    stream.write_all(response.as_bytes()).unwrap();
 }
 
+
+
+
 fn handle_post_request(request: &str) -> (String, String) {
+    println!("got request");
     match get_user_request_body(request) {
         Ok(user) => {
+            println!("got user");
             // Establish a connection to the database
             let mut client = match Client::connect(DB_URL, NoTls) {
-                Ok(client) => client,
+                Ok(client) =>{
+                    println!("got client");
+                    client
+                },
                 Err(_) => return (INTERNAL_ERROR.to_string(), "Internal error".to_string()),
             };
 
@@ -103,6 +119,7 @@ fn handle_post_request(request: &str) -> (String, String) {
                     &[&user.firstname, &user.lastname, &user.username, &user.email, &user.password]
                 ) {
                     Ok(row) => {
+                        println!("got row");
                         let user_id: i32 = row.get(0);
 
                         match client.query_one(
@@ -110,6 +127,7 @@ fn handle_post_request(request: &str) -> (String, String) {
                             &[&user_id],
                         ) {
                             Ok(row) => {
+                                println!("got row user");
                                 let user = User {
                                     id: row.get(0),
                                     firstname: row.get(1),
@@ -131,7 +149,7 @@ fn handle_post_request(request: &str) -> (String, String) {
                 return (NOT_FOUND.to_string(),"User with the given email or username already exists".to_string());
             }
         }
-        _ => return (INTERNAL_ERROR.to_string(), "Internal error".to_string()),
+        _ => return (NOT_FOUND.to_string(), "Internal error".to_string()),
     }
 }
 
@@ -226,7 +244,10 @@ fn handle_login_request(request: &str) -> (String, String) {
 
 fn get_user_request_body(request: &str) -> Result<User, serde_json::Error> {
 
+    println!("request in get user body \n{}\n\n",request);
     let json_str = request.split("\r\n\r\n").last().unwrap_or_default();
+    println!("request in get user body (json){}\n\n",json_str);
+    
     // Deserialize the JSON string into a User struct
     serde_json::from_str(json_str).map_err(|err| {
         // Print debug information

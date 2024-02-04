@@ -7,7 +7,7 @@ COPY . .
 
 RUN cargo build --release
 
-#Preduction stage
+#Production stage
 FROM debian:buster-slim
 
 WORKDIR /user/local/bin
