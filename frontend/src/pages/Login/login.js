@@ -44,7 +44,7 @@ const Login = () => {
     const email = data.get('email');
     const password = data.get('password');
 
-    axios.post("https://rustbackend.onrender.com//api/rust/users/login",{
+    axios.post("https://rustbackend.onrender.com/api/rust/users/login",{
       email,
       password
     })

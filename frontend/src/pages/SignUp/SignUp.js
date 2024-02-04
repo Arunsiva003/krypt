@@ -35,7 +35,7 @@ export default function SignUp() {
   const navigate =useNavigate();
   
   // React.useEffect(()=>{
-  //   axios.get("https://rustbackend.onrender.com//api/rust/users")
+  //   axios.get("https://rustbackend.onrender.com/api/rust/users")
   //   .then((res)=>console.log(res.data));
   // },[])
 
@@ -49,7 +49,7 @@ export default function SignUp() {
     const username = data.get('username');
     const password = data.get('password');
     
-    axios.post("https://rustbackend.onrender.com//api/rust/users", {
+    axios.post("https://rustbackend.onrender.com/api/rust/users", {
       firstname:firstName,
       lastname:lastName,
       username,
