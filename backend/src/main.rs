@@ -125,10 +125,6 @@ fn get_content_length(request: &str) -> Option<u64> {
     None
 }
 
-
-
-
-
 fn handle_post_request(request: &str) -> (String, String) {
     println!("got request");
     match get_user_request_body(request) {
