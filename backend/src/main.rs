@@ -1,8 +1,10 @@
 use postgres::{Client, NoTls};
 use std::net::{TcpListener, TcpStream};
 use std::io::{Read, Write};
+use std::fs;
+use std::path::Path;
 
-mod ../etc/secrets/config;
+mod config;
 
 
 #[macro_use]
@@ -19,6 +21,14 @@ struct User {
 }
 
 
+pub fn load_config() -> String {
+    let config_path = "/etc/secrets/<filename>"; // Update with the new path
+    fs::read_to_string(config_path).unwrap_or_else(|err| {
+        panic!("Failed to read config file: {}", err);
+    })
+}
+
+mod config;
 const OK_RESPONSE: &str = "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods:POST, GET, PUT, DELETE\r\nAccess-Control-Allow-Headers: Content-Type\r\n\r\n";
 const NOT_FOUND: &str = "HTTP/1.1 404 NOT FOUND\r\n\r\n";
 const INTERNAL_ERROR: &str = "HTTP/1.1 500 INTERNAL ERROR\r\n\r\n";
