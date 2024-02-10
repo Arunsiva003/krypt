@@ -2,9 +2,11 @@ use postgres::{Client, NoTls};
 use std::net::{TcpListener, TcpStream};
 use std::io::{Read, Write};
 
+mod config;
+
+
 #[macro_use]
 extern crate serde_derive;
-
 #[derive(Serialize, Deserialize)]
 #[derive(Debug)]
 struct User {
@@ -16,10 +18,12 @@ struct User {
     password: String,
 }
 
-const DB_URL: &str = "postgresql://uu09n2xc646nt4vczmt7:bTb9GyWabKOZ5h499cnEeIZXMSzt8x@b3ix8fekyxlm55qvgxtk-postgresql.services.clever-cloud.com:50013/b3ix8fekyxlm55qvgxtk";
+
 const OK_RESPONSE: &str = "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods:POST, GET, PUT, DELETE\r\nAccess-Control-Allow-Headers: Content-Type\r\n\r\n";
 const NOT_FOUND: &str = "HTTP/1.1 404 NOT FOUND\r\n\r\n";
 const INTERNAL_ERROR: &str = "HTTP/1.1 500 INTERNAL ERROR\r\n\r\n";
+const DB_URL:&str = config::POSTGRES_URL;
+
 
 fn main() {
     if let Err(x) = set_database() {
@@ -117,22 +121,6 @@ fn handle_client(mut stream: TcpStream) {
     stream.write_all(response.as_bytes()).unwrap();
 }
 
-fn get_content_length(request: &str) -> Option<u64> {
-    const CONTENT_LENGTH_HEADER: &str = "Content-Length: ";
-
-    if let Some(start_index) = request.find(CONTENT_LENGTH_HEADER) {
-        let end_index = request[start_index + CONTENT_LENGTH_HEADER.len()..].find('\r');
-        if let Some(end_index) = end_index {
-            let content_length_str = &request[start_index + CONTENT_LENGTH_HEADER.len()..start_index + CONTENT_LENGTH_HEADER.len() + end_index];
-            if let Ok(content_length) = content_length_str.parse::<u64>() {
-                return Some(content_length);
-            }
-        }
-    }
-
-    None
-}
-
 fn handle_post_request(request: &str) -> (String, String) {
     println!("got request");
     match get_user_request_body(request) {
@@ -148,14 +136,14 @@ fn handle_post_request(request: &str) -> (String, String) {
             };
 
             // Check if email and username are not already present
-
+            
             if is_email_exists(&user.email, &mut client){
                 return (NOT_FOUND.to_string(),"User with the given email already exists".to_string());
             }
             if is_username_exists(&user.username, &mut client){
                 return (NOT_FOUND.to_string(),"User with the given username already exists".to_string());
             }
-
+            
             // Insert the user into the database
             match client.query_one(
                 "INSERT INTO users (firstname, lastname, username, email, password) VALUES ($1, $2, $3, $4, $5) RETURNING id",
@@ -167,45 +155,40 @@ fn handle_post_request(request: &str) -> (String, String) {
                     let user_id = user_id.to_string(); 
                     handle_get_user_request(&user_id)
                     // match client.query_one(
-                    //     "SELECT id, firstname, lastname, username, email, password FROM users WHERE id = $1",
-                    //     &[&user_id],
-                    // ) {
+                        //     "SELECT id, firstname, lastname, username, email, password FROM users WHERE id = $1",
+                        //     &[&user_id],
+                        // ) {
                     //     Ok(row) => {
                     //         println!("got row user");
                     //         let user = User {
-                    //             id: row.get(0),
-                    //             firstname: row.get(1),
-                    //             lastname: row.get(2),
-                    //             username: row.get(3),
-                    //             email: row.get(4),
-                    //             password: row.get(5),
-                    //         };
-
-                    //         return (OK_RESPONSE.to_string(), serde_json::to_string(&user).unwrap());
-                    //     }
-                    //     Err(_) => return (INTERNAL_ERROR.to_string(), "Failed to retrieve created user".to_string()),
-                    // }
+                        //             id: row.get(0),
+                        //             firstname: row.get(1),
+                        //             lastname: row.get(2),
+                        //             username: row.get(3),
+                        //             email: row.get(4),
+                        //             password: row.get(5),
+                        //         };
+                        
+                        //         return (OK_RESPONSE.to_string(), serde_json::to_string(&user).unwrap());
+                        //     }
+                        //     Err(_) => return (INTERNAL_ERROR.to_string(), "Failed to retrieve created user".to_string()),
+                        // }
+                    }
+                    Err(_) => return (INTERNAL_ERROR.to_string(), "Failed to insert user".to_string()),
                 }
-                Err(_) => return (INTERNAL_ERROR.to_string(), "Failed to insert user".to_string()),
+                
             }
-         
-    }
-    _ => return (NOT_FOUND.to_string(), "Internal error".to_string()),
+            _ => return (NOT_FOUND.to_string(), "Internal error".to_string()),
+        }
 }
-
-}
-
-
-
-
-fn handle_get_user_request(user_id: &str) -> (String, String) {
     
+fn handle_get_user_request(user_id: &str) -> (String, String) { 
     // Connect to the database
     let mut client = match Client::connect(DB_URL, NoTls) {
         Ok(client) => client,
         Err(_) => return (INTERNAL_ERROR.to_string(), "Internal error".to_string()),
     };
-
+    
     // Query the database to get user details based on ID
     println!("user is ####################{}",user_id);
     let user_id: i32 = user_id.trim().parse().unwrap();
@@ -228,12 +211,10 @@ fn handle_get_user_request(user_id: &str) -> (String, String) {
         _ => (NOT_FOUND.to_string(), "User not found".to_string()),
     }
 }
-
-
-
+    
 fn handle_update_request(request: &str) -> (String, String) {
-    //request la irkra user id ah parse function return panum 
-    let id:i32;
+        //request la irkra user id ah parse function return panum 
+        let id:i32;
     if let Some(id1) = parse_user_id(request) {
         id = id1;
     } else {
@@ -244,9 +225,9 @@ fn handle_update_request(request: &str) -> (String, String) {
         Ok(user) => {
             match Client::connect(DB_URL, NoTls) {
                 Ok(mut client) => {
-                    
-                    if is_email_exists(&user.email, &mut client) {return (NOT_FOUND.to_string(),"User with the given email already exists".to_string());}
-                    if is_username_exists(&user.username, &mut client) {return (NOT_FOUND.to_string(),"User with the given username already exists".to_string());}
+                     
+                    // if is_email_exists(&user.email, &mut client) {return (NOT_FOUND.to_string(),"User with the given email already exists".to_string());}
+                    // if is_username_exists(&user.username, &mut client) {return (NOT_FOUND.to_string(),"User with the given username already exists".to_string());}
                     
                     // Update the user details in the database
                     match client.execute(
@@ -283,7 +264,6 @@ fn handle_update_request(request: &str) -> (String, String) {
     }
 }
 
-
 fn handle_get_all_request(_request: &str) -> (String, String) {
     match Client::connect(DB_URL, NoTls) {
         Ok(mut client) => {
@@ -305,8 +285,6 @@ fn handle_get_all_request(_request: &str) -> (String, String) {
         _ => (INTERNAL_ERROR.to_string(), "Internal error".to_string()),
     }
 }
-
-
 
 fn handle_login_request(request: &str) -> (String, String) {
     
@@ -378,6 +356,22 @@ fn get_user_request_body(request: &str) -> Result<User, serde_json::Error> {
     })
 }
 
+fn get_content_length(request: &str) -> Option<u64> {
+    const CONTENT_LENGTH_HEADER: &str = "Content-Length: ";
+
+    if let Some(start_index) = request.find(CONTENT_LENGTH_HEADER) {
+        let end_index = request[start_index + CONTENT_LENGTH_HEADER.len()..].find('\r');
+        if let Some(end_index) = end_index {
+            let content_length_str = &request[start_index + CONTENT_LENGTH_HEADER.len()..start_index + CONTENT_LENGTH_HEADER.len() + end_index];
+            if let Ok(content_length) = content_length_str.parse::<u64>() {
+                return Some(content_length);
+            }
+        }
+    }
+
+    None
+}
+
 fn parse_user_id(request: &str) -> Option<i32> {
     // Extract user ID from the request path
     
@@ -391,7 +385,6 @@ fn parse_user_id(request: &str) -> Option<i32> {
     }
     None
 }
-
 
 fn is_email_exists(email: &str, client: &mut Client) -> bool{
     match client.query_opt("SELECT 1 FROM users WHERE email = $1", &[&email]){
