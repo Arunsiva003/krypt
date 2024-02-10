@@ -2,7 +2,7 @@ use postgres::{Client, NoTls};
 use std::net::{TcpListener, TcpStream};
 use std::io::{Read, Write};
 
-mod config;
+mod ../etc/secrets/config;
 
 
 #[macro_use]
