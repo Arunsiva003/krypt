@@ -22,7 +22,7 @@ struct User {
 
 
 pub fn load_config() -> String {
-    let config_path = "/etc/secrets/<filename>"; // Update with the new path
+    let config_path = "/etc/secrets/config.rs";
     fs::read_to_string(config_path).unwrap_or_else(|err| {
         panic!("Failed to read config file: {}", err);
     })
