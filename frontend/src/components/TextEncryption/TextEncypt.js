@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useContext } from 'react';
 import { TextField, Button, TextareaAutosize, Divider, Typography, Paper, Grid, Container, Modal, Box } from '@mui/material';
 import FileCopyIcon from '@mui/icons-material/FileCopy';
+import UserContext from '../../UserContext';
+import axios from 'axios';
 
 const TextEncrypt = () => {
   const [text, setText] = useState('');
@@ -9,6 +11,7 @@ const TextEncrypt = () => {
   const [decryptedText, setDecryptedText] = useState('');
   const [showFullModal, setShowFullModal] = useState(false);
   const [fullText, setFullText] = useState('');
+  const {user} = useContext(UserContext);
 
   function generateRandomKey(length = 16) {
     const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
@@ -77,6 +80,22 @@ const TextEncrypt = () => {
     link.download = fileName;
     link.click();
   };
+
+
+  const handleCloudSave = async () => {      
+    try{
+      const response =  axios.post('http://localhost:8080/api/rust/text',{
+        user_id:user.id,
+        username:user.username,
+        encrypted_text:encryptedText,
+        key_used:key
+      });
+      console.log(response);
+      alert("Data saved");
+    }catch(err){
+      console.log(err);
+    }
+  }
 
   const handleViewFull = () => {
     setShowFullModal(true);
@@ -212,6 +231,7 @@ const TextEncrypt = () => {
             </Button>
           </Grid>
         </Grid>
+        <Button onClick={handleCloudSave}>Cloud Save</Button>
       </Paper>
     </Container>
   );

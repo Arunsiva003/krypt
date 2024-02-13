@@ -8,7 +8,10 @@ import Home from './pages/Home/Home';
 import Navbar from './components/Navbar/Navbar';
 import Krypt from './pages/Krypt/Krypt';
 import UserContext from './UserContext';
-import ImageEncrypt from "./components/ImageEncrypt/ImageEncrypt"
+import ImageEncrypt from "./components/ImageEncrypt/ImageEncrypt";
+import ProfileComponent from './pages/Profile/Profile';
+import Dashboard from './components/Dashboard/Dashboard';
+import Encryptions from './components/Encryptions/Encryptions';
 
 
 // const theme = createTheme({
@@ -53,6 +56,9 @@ function App() {
                 <Route path='/home' element={<Home />} />
                 <Route path='/krypt/:name' element={<Krypt />} />
                 <Route path='/imagek' element={<ImageEncrypt />} />
+                <Route path='/profile' element={<ProfileComponent/>} />
+                <Route path='/encryptions' element={<Encryptions/>}/>
+                <Route path='/dashboard' element={<Encryptions/>}/>
                 <Route path='*' element={<NotFound />} />
               </Routes>
             }
@@ -70,3 +76,5 @@ const NotFound = () => {
 };
 
 export default App;
+
+

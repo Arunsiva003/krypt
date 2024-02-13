@@ -1,5 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useContext } from 'react';
 import { BsCloudUpload } from 'react-icons/bs';
+import axios from 'axios';
+import UserContext from '../../UserContext';
+
 
 import './Steganography.css';
 
@@ -12,6 +15,9 @@ const Steganography = () => {
   const [operation, setOperation] = useState("encrypt");
   const [showDownloadButton, setShowDownloadButton] = useState(false);
   const [passkey, setPasskey] = useState('');
+  const [cloudUploadLink,setCloudUploadLink] = useState('');
+  const {user} = useContext(UserContext);
+
 
   const encodeMessage = async () => {
     try {
@@ -168,6 +174,52 @@ const Steganography = () => {
     link.download = 'decoded_message.txt';
     link.click();
   }
+  const handleCloudSave = async () => {
+    try {
+      // Convert data URI to blob
+      const blob = await fetch(encodedImageSrc).then((res) => res.blob());
+  
+      // Create FormData object
+      const formData = new FormData();
+      formData.append('file', blob);
+      formData.append('upload_preset', 'pctll1ta'); // Replace 'your_upload_preset' with your Cloudinary upload preset
+  
+      // Make POST request to Cloudinary upload API
+      const cloudinaryResponse = await axios.post('https://api.cloudinary.com/v1_1/dn5iikaas/image/upload', formData);
+  
+      console.log(cloudinaryResponse);
+  
+      const imageUrl = cloudinaryResponse.data.url;
+      setCloudUploadLink(cloudinaryResponse.data.url);
+      // Now imageUrl contains the URL of the uploaded image on Cloudinary
+      console.log('Image uploaded to Cloudinary:', imageUrl);
+      alert("Image stored in DB");
+
+
+      
+    try{
+      console.log("cloud upload link",cloudUploadLink);
+      const response =  axios.post('http://localhost:8080/api/rust/textimage',{
+        user_id:user.id,
+        username:user.username,
+        encrypted_image_link:imageUrl,
+        key_used:passkey
+      });
+      console.log(response);
+      alert("Data saved");
+    }catch(err){
+      console.log(err);
+    }
+      // Redirect to success page or perform any other actions
+      // window.location.href = '/success';
+    } catch (error) {
+      console.error('Error uploading image to Cloudinary:', error);
+      alert('An error occurred while uploading the image to Cloudinary. Please try again.');
+    }
+  };
+  
+  
+  
 
   const handleOperationChange = (selectedOperation) => {
     setOperation(selectedOperation);
@@ -270,6 +322,7 @@ const Steganography = () => {
           )}
         </>
       )}
+      <button onClick={handleCloudSave}>Cloud Save</button>
     </div>
   );
 };

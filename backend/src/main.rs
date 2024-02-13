@@ -20,15 +20,7 @@ struct User {
     password: String,
 }
 
-
-pub fn load_config() -> String {
-    let config_path = "/etc/secrets/config.rs";
-    fs::read_to_string(config_path).unwrap_or_else(|err| {
-        panic!("Failed to read config file: {}", err);
-    })
-}
-
-mod config;
+// mod config;
 const OK_RESPONSE: &str = "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods:POST, GET, PUT, DELETE\r\nAccess-Control-Allow-Headers: Content-Type\r\n\r\n";
 const NOT_FOUND: &str = "HTTP/1.1 404 NOT FOUND\r\n\r\n";
 const INTERNAL_ERROR: &str = "HTTP/1.1 500 INTERNAL ERROR\r\n\r\n";
@@ -36,11 +28,11 @@ const DB_URL:&str = config::POSTGRES_URL;
 
 
 fn main() {
-    if let Err(x) = set_database() {
-        println!("{}", x);
-        println!("Error setting database");
-        return;
-    }
+    // if let Err(x) = set_database() {
+    //     println!("{}", x);
+    //     println!("Error setting database");
+    //     return;
+    // }
 
     let listener = TcpListener::bind(format!("0.0.0.0:8080")).unwrap();
     println!("Server listening on port 8080");
@@ -120,6 +112,13 @@ fn handle_client(mut stream: TcpStream) {
                 handle_get_all_request(r)
             }
         },
+        r if r.starts_with("GET /api/rust/textimage") =>handle_get_text_image_request(r),
+        r if r.starts_with("GET /api/rust/text") => handle_get_text_request(r),
+        r if r.starts_with("GET /api/rust/image") => handle_get_image_request(r),
+        r if r.starts_with ("POST /api/rust/image") => handle_image_encrypted_image_save_request(r),
+        r if r.starts_with("POST /api/rust/text") => handle_text_encrypted_text_save_request(r),
+        r if r.starts_with("POST /api/rust/textimage")=>handle_text_encrypted_image_save_request(r),
+        r if r.starts_with("GET /api/rust/users") => handle_get_all_request(r),
         r if r.starts_with("PUT /api/rust/users/") => handle_update_request(r),
         r if r.starts_with("POST /api/rust/users/login") => handle_login_request(r),
         r if r.starts_with("POST /api/rust/users") => handle_post_request(r),
@@ -275,6 +274,7 @@ fn handle_update_request(request: &str) -> (String, String) {
 }
 
 fn handle_get_all_request(_request: &str) -> (String, String) {
+    println!("getting users db");
     match Client::connect(DB_URL, NoTls) {
         Ok(mut client) => {
             let mut users = Vec::new();
@@ -347,6 +347,316 @@ fn handle_login_request(request: &str) -> (String, String) {
         }
     }
 }
+
+
+
+fn handle_get_text_image_request(request: &str) -> (String, String) {
+    // Parse the request to extract the user ID from the URL path
+    let path_parts: Vec<&str> = request.split(' ').collect();
+    let user_id: i32 = path_parts.get(1).unwrap_or(&"").trim_start_matches("/api/rust/textimage/").parse().expect("err in conv");
+
+    // Establish a connection to the database
+    let mut client = match Client::connect(DB_URL, NoTls) {
+        Ok(client) => client,
+        Err(_) => {
+            return (INTERNAL_ERROR.to_string(), "Failed to connect to the database".to_string());
+        }
+    };
+
+    // Query the database to fetch all records associated with the user ID
+    let mut content = String::new();
+    match client.query(
+        "SELECT user_id, username, encrypted_image_link, key_used, id FROM text_to_image WHERE user_id = $1",
+        &[&user_id],
+    ) {
+        Ok(rows) => {
+            let mut records = Vec::new();
+            for row in rows {       
+                let user_id: i32 = row.get(0);
+                let username: String = row.get(1);
+                let encrypted_image_link: String = row.get(2);
+                let key_used: String = row.get(3);
+                let id: i32 = row.get(4);
+
+                // You can format the record as JSON and push it to the records vector
+                let record_json = format!("{{\"id\": {}, \"user_id\": {}, \"username\": \"{}\", \"encrypted_image_link\": \"{}\", \"key_used\": \"{}\"}}",
+                                            id, user_id, username, encrypted_image_link, key_used);
+                records.push(record_json);
+            }
+            content = format!("[{}]", records.join(","));
+        }
+        Err(_) => {
+            return (INTERNAL_ERROR.to_string(), "Failed to fetch records from the database".to_string());
+        }
+    };
+
+    (OK_RESPONSE.to_string(), content)
+}
+
+fn handle_get_text_request(request: &str) -> (String, String) {
+    // Parse the request to extract the user ID from the URL path
+    let path_parts: Vec<&str> = request.split(' ').collect();
+    let user_id: i32 = path_parts.get(1).unwrap_or(&"").trim_start_matches("/api/rust/text/").parse().expect("err in conv");
+
+    // Establish a connection to the database
+    let mut client = match Client::connect(DB_URL, NoTls) {
+        Ok(client) => client,
+        Err(_) => {
+            return (INTERNAL_ERROR.to_string(), "Failed to connect to the database".to_string());
+        }
+    };
+
+    // Query the database to fetch all records associated with the user ID
+    let mut content = String::new();
+    match client.query(
+        "SELECT user_id, username, encrypted_text, key_used, id FROM text_to_text WHERE user_id = $1",
+        &[&user_id],
+    ) {
+        Ok(rows) => {
+            let mut records = Vec::new();
+            for row in rows {       
+                let user_id: i32 = row.get(0);
+                let username: String = row.get(1);
+                let encrypted_text: String = row.get(2);
+                let key_used: String = row.get(3);
+                let id: i32 = row.get(4);
+
+                // You can format the record as JSON and push it to the records vector
+                let record_json = format!("{{\"id\": {}, \"user_id\": {}, \"username\": \"{}\", \"encrypted_text\": \"{}\", \"key_used\": \"{}\"}}",
+                                            id, user_id, username, encrypted_text, key_used);
+                records.push(record_json);
+            }
+            content = format!("[{}]", records.join(","));
+        }
+        Err(_) => {
+            return (INTERNAL_ERROR.to_string(), "Failed to fetch records from the database".to_string());
+        }
+    };
+
+    (OK_RESPONSE.to_string(), content)
+}
+
+
+fn handle_get_image_request(request: &str) -> (String, String) {
+    // Parse the request to extract the user ID from the URL path
+    let path_parts: Vec<&str> = request.split(' ').collect();
+    let user_id: i32 = path_parts.get(1).unwrap_or(&"").trim_start_matches("/api/rust/image/").parse().expect("err in conv");
+
+    // Establish a connection to the database
+    let mut client = match Client::connect(DB_URL, NoTls) {
+        Ok(client) => client,
+        Err(_) => {
+            return (INTERNAL_ERROR.to_string(), "Failed to connect to the database".to_string());
+        }
+    };
+
+    // Query the database to fetch all records associated with the user ID
+    let mut content = String::new();
+    match client.query(
+        "SELECT user_id, username, encrypted_image_link, key_used, id FROM image_to_image WHERE user_id = $1",
+        &[&user_id],
+    ) {
+        Ok(rows) => {
+            let mut records = Vec::new();
+            for row in rows {       
+                let user_id: i32 = row.get(0);
+                let username: String = row.get(1);
+                let encrypted_image_link: String = row.get(2);
+                let key_used: String = row.get(3);
+                let id: i32 = row.get(4);
+
+                // You can format the record as JSON and push it to the records vector
+                let record_json = format!("{{\"id\": {}, \"user_id\": {}, \"username\": \"{}\", \"encrypted_image_link\": \"{}\", \"key_used\": \"{}\"}}",
+                                            id, user_id, username, encrypted_image_link, key_used);
+                records.push(record_json);
+            }
+            content = format!("[{}]", records.join(","));
+        }
+        Err(_) => {
+            return (INTERNAL_ERROR.to_string(), "Failed to fetch records from the database".to_string());
+        }
+    };
+
+    (OK_RESPONSE.to_string(), content)
+}
+
+fn handle_text_encrypted_image_save_request(request: &str) -> (String, String) {
+    // Extract the JSON part of the request body
+    let json_body = request.split("\r\n\r\n").last().unwrap_or_default();
+    println!("JSON Body: {}", json_body);
+
+    // Parse the JSON string
+    match serde_json::from_str::<serde_json::Value>(json_body) {
+        Ok(request_json) => {
+            println!("Parsed JSON: {:?}", request_json);
+
+            // Extract user_id, username, encrypted_image_link, and key_used from the JSON request
+            let user_id = request_json.get("user_id").and_then(|v| v.as_i64());
+            let username = request_json.get("username").and_then(|v| v.as_str());
+            let encrypted_image_link = request_json.get("encrypted_image_link").and_then(|v| v.as_str());
+            let key_used = request_json.get("key_used").and_then(|v| v.as_str());
+            println!("{:?}",user_id);
+            println!("{:?}",username);
+            println!("{:?}",encrypted_image_link);
+            // Check if all required fields are present
+            if let (Some(user_id), Some(username), Some(encrypted_image_link), Some(key_used)) =
+                (user_id, username, encrypted_image_link, key_used)
+            {
+                // Establish a connection to the database
+            println!("{:?}",user_id);
+            println!("{:?}",username);
+            println!("{:?}",encrypted_image_link);
+            let user_id: i32 = user_id as i32;
+
+            // let user_id: i32 = user_id; // to suit postgres data type
+
+            
+                match Client::connect(DB_URL, NoTls) {
+                    Ok(mut client) => {
+                        // Insert the data into the database table
+                        match client.execute(
+                            "INSERT INTO text_to_image (user_id, username, encrypted_image_link, key_used) VALUES ($1, $2, $3, $4)",
+                            &[&user_id, &username, &encrypted_image_link, &key_used],
+                        ) {
+                            Ok(_) => (OK_RESPONSE.to_string(), "Data stored successfully".to_string()),
+                            Err(err) =>{
+                                println!("{:?}",err);
+                                (INTERNAL_ERROR.to_string(), "Failed to store data".to_string())
+                            }
+                        }
+                    }
+                    Err(_) => (INTERNAL_ERROR.to_string(), "Internal error".to_string()),
+                }
+            } else {
+                (NOT_FOUND.to_string(), "Invalid request format".to_string())
+            }
+        }
+        Err(err) => {
+            eprintln!("Error parsing JSON in textImage: {:?}", err);
+            (INTERNAL_ERROR.to_string(), "Error parsing JSON in textImage".to_string())
+        }
+    }
+}
+
+fn handle_text_encrypted_text_save_request(request: &str) -> (String, String) {
+    // Extract the JSON part of the request body
+    let json_body = request.split("\r\n\r\n").last().unwrap_or_default();
+    println!("JSON Body: {}", json_body);
+
+    // Parse the JSON string
+    match serde_json::from_str::<serde_json::Value>(json_body) {
+        Ok(request_json) => {
+            println!("Parsed JSON: {:?}", request_json);
+
+            // Extract user_id, username, encrypted_text, and key_used from the JSON request
+            let user_id = request_json.get("user_id").and_then(|v| v.as_i64());
+            let username = request_json.get("username").and_then(|v| v.as_str());
+            let encrypted_text = request_json.get("encrypted_text").and_then(|v| v.as_str());
+            let key_used = request_json.get("key_used").and_then(|v| v.as_str());
+            println!("{:?}",user_id);
+            println!("{:?}",username);
+            println!("{:?}",encrypted_text);
+            // Check if all required fields are present
+            if let (Some(user_id), Some(username), Some(encrypted_text), Some(key_used)) =
+                (user_id, username, encrypted_text, key_used)
+            {
+                // Establish a connection to the database
+            println!("{:?}",user_id);
+            println!("{:?}",username);
+            println!("{:?}",encrypted_text);
+            let user_id: i32 = user_id as i32;
+
+            // let user_id: i32 = user_id; // to suit postgres data type
+
+            
+                match Client::connect(DB_URL, NoTls) {
+                    Ok(mut client) => {
+                        // Insert the data into the database table
+                        match client.execute(
+                            "INSERT INTO text_to_text (user_id, username, encrypted_text, key_used) VALUES ($1, $2, $3, $4)",
+                            &[&user_id, &username, &encrypted_text, &key_used],
+                        ) {
+                            Ok(_) => (OK_RESPONSE.to_string(), "Data stored successfully".to_string()),
+                            Err(err) =>{
+                                println!("{:?}",err);
+                                (INTERNAL_ERROR.to_string(), "Failed to store data".to_string())
+                            }
+                        }
+                    }
+                    Err(_) => (INTERNAL_ERROR.to_string(), "Internal error".to_string()),
+                }
+            } else {
+                (NOT_FOUND.to_string(), "Invalid request format".to_string())
+            }
+        }
+        Err(err) => {
+            eprintln!("Error parsing JSON in textImage: {:?}", err);
+            (INTERNAL_ERROR.to_string(), "Error parsing JSON in textImage".to_string())
+        }
+    }
+}
+
+fn handle_image_encrypted_image_save_request(request: &str) -> (String, String) {
+    // Extract the JSON part of the request body
+    let json_body = request.split("\r\n\r\n").last().unwrap_or_default();
+    println!("JSON Body: {}", json_body);
+
+    // Parse the JSON string
+    match serde_json::from_str::<serde_json::Value>(json_body) {
+        Ok(request_json) => {
+            println!("Parsed JSON: {:?}", request_json);
+
+            // Extract user_id, username, encrypted_image_link, and key_used from the JSON request
+            let user_id = request_json.get("user_id").and_then(|v| v.as_i64());
+            let username = request_json.get("username").and_then(|v| v.as_str());
+            let encrypted_image_link = request_json.get("encrypted_image_link").and_then(|v| v.as_str());
+            let key_used = request_json.get("key_used").and_then(|v| v.as_str());
+            println!("{:?}",user_id);
+            println!("{:?}",username);
+            println!("{:?}",encrypted_image_link);
+            // Check if all required fields are present
+            if let (Some(user_id), Some(username), Some(encrypted_image_link), Some(key_used)) =
+                (user_id, username, encrypted_image_link, key_used)
+            {
+                // Establish a connection to the database
+            println!("{:?}",user_id);
+            println!("{:?}",username);
+            println!("{:?}",encrypted_image_link);
+            let user_id: i32 = user_id as i32;
+
+            // let user_id: i32 = user_id; // to suit postgres data type
+
+            
+                match Client::connect(DB_URL, NoTls) {
+                    Ok(mut client) => {
+                        // Insert the data into the database table
+                        match client.execute(
+                            "INSERT INTO image_to_image (user_id, username, encrypted_image_link, key_used) VALUES ($1, $2, $3, $4)",
+                            &[&user_id, &username, &encrypted_image_link, &key_used],
+                        ) {
+                            Ok(_) => (OK_RESPONSE.to_string(), "Data stored successfully".to_string()),
+                            Err(err) =>{
+                                println!("{:?}",err);
+                                (INTERNAL_ERROR.to_string(), "Failed to store data".to_string())
+                            }
+                        }
+                    }
+                    Err(_) => (INTERNAL_ERROR.to_string(), "Internal error".to_string()),
+                }
+            } else {
+                (NOT_FOUND.to_string(), "Invalid request format".to_string())
+            }
+        }
+        Err(err) => {
+            eprintln!("Error parsing JSON in textImage: {:?}", err);
+            (INTERNAL_ERROR.to_string(), "Error parsing JSON in textImage".to_string())
+        }
+    }
+}
+
+
+
+
 
 
 

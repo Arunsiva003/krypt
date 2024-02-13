@@ -49,13 +49,16 @@ const Login = () => {
       password
     })
     .then((res)=>{
+      console.log("after login:",res.data);
       setUser(res.data);
-      console.log(res);
       navigate("/");
+      console.log("Usercontext user: in login:",user);
     })
     .catch((err)=>{
       alert("Invalid username or password");
     })
+
+  
 
   };
 

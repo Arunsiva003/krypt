@@ -48,6 +48,19 @@ function Navbar() {
     } 
   };
 
+  const handleNav = (ind) =>{
+    console.log("ind:",ind);
+    if(ind=='Profile'){
+      navigate('/profile');
+    }
+    else if(ind=='Account'){
+      navigate('account');
+    }
+    else if(ind=='Dashboard'){
+      navigate('dashboard');
+    }
+  }
+
   return (
     <AppBar position="static">
       <Container maxWidth="xl">
@@ -103,7 +116,7 @@ function Navbar() {
               {pages.map((page,ind) => (
                 <MenuItem key={page} onClick={handleCloseNavMenu}>
                 <Typography textAlign="center">
-                  <Link to={navLinks[ind]}>
+                  <Link to={`${navLinks[ind]}`}>
                       {page}
                       </Link>
                       </Typography>
@@ -139,7 +152,7 @@ function Navbar() {
                 onClick={()=>{navigate(`${navLinks[ind]}`)}}/*-----------------------*/
                 sx={{ my: 2, color: 'white', display: 'block' }}
               >
-                {page}1
+                {page}
               </Button>
             ))}
           </Box>
@@ -168,7 +181,7 @@ function Navbar() {
             >
               {settings.map((setting,ind) => (
                 <MenuItem key={ind} onClick={()=>handleCloseUserMenu(ind)}>
-                  <Typography textAlign="center">{setting}</Typography>
+                  <Typography textAlign="center" onClick={()=>navigate(`/${setting.toLowerCase()}`)}>{setting}</Typography>
                 </MenuItem>
               ))}
             </Menu>

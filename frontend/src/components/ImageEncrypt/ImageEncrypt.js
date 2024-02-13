@@ -1,110 +1,171 @@
-// import React, { useState } from 'react';
-// import ChaosMap from 'chaosmap';
+import React, { useContext, useState } from 'react';
+import { Tab, Tabs, TextField, Button, Typography, Container, Grid, CircularProgress } from '@mui/material';
+import UserContext from '../../UserContext';
+import axios from 'axios';
 
-// const ImageEncryptor = () => {
-//   const [image, setImage] = useState(null);
-//   const [key, setKey] = useState('');
-//   const [encryptedImage, setEncryptedImage] = useState(null);
+const XOREncryption = () => {
+  const [image, setImage] = useState(null);
+  const [processedImage, setProcessedImage] = useState(null);
+  const [key, setKey] = useState('');
+  const [isEncrypted, setIsEncrypted] = useState(false);
+  const [selectedTab, setSelectedTab] = useState(0);
+  const [processing, setProcessing] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+  const [cloudUploadLink, setCloudUploadLink] = useState('');
+  const {user} = useContext(UserContext);
 
-//   const handleImageChange = (e) => {
-//     const file = e.target.files[0];
-//     const reader = new FileReader();
+  const handleImageChange = (e) => {
+    const file = e.target.files[0];
+    const reader = new FileReader();
 
-//     reader.onload = (event) => {
-//       const img = new Image();
-//       img.src = event.target.result;
-//       img.onload = () => {
-//         setImage(img);
-//         setEncryptedImage(null);
-//       };
-//     };
+    reader.onload = (upload) => {
+      setImage(upload.target.result);
+      setProcessedImage(null);
+      setIsEncrypted(false);
+    };
 
-//     reader.readAsDataURL(file);
-//   };
+    reader.readAsDataURL(file);
+  };
 
-//   const handleKeyChange = (e) => {
-//     setKey(e.target.value);
-//   };
+  const handleKeyChange = (e) => {
+    setKey(e.target.value);
+  };
 
-//   const chaoticXOR = (pixel, key, chaosKey) => {
-//     const encryptedValue = pixel ^ key ^ chaosKey;
-//     return encryptedValue;
-//   };
+  const processImage = async (encrypt) => {
+    if (image && key) {
+      setProcessing(true);
+      setErrorMessage('');
 
-//   const encryptImage = () => {
-//     if (!image || !key) {
-//       alert('Please select an image and enter a key.');
-//       return;
-//     }
+      try {
+        // Simulate processing delay
+        await new Promise((resolve) => setTimeout(resolve, 2000));
 
-//     const chaosMap = new ChaosMap.Lorenz();
+        // Convert base64 image to Uint8Array
+        const imgData = atob(image.split(',')[1]);
+        const dataArray = new Uint8Array(imgData.length);
+        for (let i = 0; i < imgData.length; i++) {
+          dataArray[i] = imgData.charCodeAt(i);
+        }
 
-//     const canvas = document.createElement('canvas');
-//     const ctx = canvas.getContext('2d');
-//     canvas.width = image.width;
-//     canvas.height = image.height;
-//     ctx.drawImage(image, 0, 0, image.width, image.height);
+        // Convert key to Uint8Array
+        const keyData = key.split('').map((char) => char.charCodeAt(0));
+        const processedArray = new Uint8Array(dataArray.length);
 
-//     const imageData = ctx.getImageData(0, 0, image.width, image.height);
-//     const data = imageData.data;
+        // XOR encryption or decryption
+        for (let i = 0; i < dataArray.length; i++) {
+          processedArray[i] = dataArray[i] ^ keyData[i % keyData.length];
+        }
 
-//     for (let i = 0; i < data.length; i += 4) {
-//       const chaosKey = chaosMap.encrypt(i, key); // Use chaos map for generating dynamic key
-//       data[i] = chaoticXOR(data[i], key, chaosKey);
-//       data[i + 1] = chaoticXOR(data[i + 1], key, chaosKey);
-//       data[i + 2] = chaoticXOR(data[i + 2], key, chaosKey);
-//     }
+        // Convert back to base64 and set as processed image
+        const processedBase64 = btoa(String.fromCharCode.apply(null, processedArray));
+        setProcessedImage(`data:image/png;base64,${processedBase64}`);
+        setIsEncrypted(encrypt);
+      } catch (error) {
+        setErrorMessage('Please upload an image with size less than 800X600');
+      } finally {
+        setProcessing(false);
+      }
+    }
+  };
 
-//     ctx.putImageData(imageData, 0, 0);
-//     const encryptedDataURL = canvas.toDataURL('image/png');
-//     setEncryptedImage(encryptedDataURL);
-//   };
+  const downloadImage = () => {
+    if (processedImage) {
+      const link = document.createElement('a');
+      link.href = processedImage;
+      link.download = isEncrypted ? 'encrypted_image.png' : 'decrypted_image.png';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  };
 
-//   const decryptImage = () => {
-//     if (!image || !key) {
-//       alert('Please select an image and enter a key.');
-//       return;
-//     }
+  const handleTabChange = (event, newValue) => {
+    setKey('');
+    setImage(null);
+    setProcessedImage(null);
+    setSelectedTab(newValue);
+  };
 
-//     const chaosMap = new ChaosMap.Lorenz();
 
-//     const canvas = document.createElement('canvas');
-//     const ctx = canvas.getContext('2d');
-//     canvas.width = image.width;
-//     canvas.height = image.height;
-//     ctx.drawImage(image, 0, 0, image.width, image.height);
+  const handleCloudSave = async () => {
+    try{
+      const response =  axios.post('http://localhost:8080/api/rust/image',{
+        user_id:user.id,
+        username:user.username,
+        encrypted_image_link:processedImage,
+        key_used:key
+      });
+      console.log(response);
+      alert("Data saved");
+    }catch(err){
+      console.log(err);
+    }
+  };
 
-//     const imageData = ctx.getImageData(0, 0, image.width, image.height);
-//     const data = imageData.data;
+  return (
+    <Container maxWidth="md">
+      <Typography variant="h4" align="center" gutterBottom>XOR Encryption</Typography>
+      <Tabs value={selectedTab} onChange={handleTabChange} centered>
+        <Tab label="Encrypt" />
+        <Tab label="Decrypt" />
+      </Tabs>
+      <div>
+        {selectedTab === 0 && (
+          <Grid container spacing={2}>
+            <Grid item xs={12}>
+              <input type="file" accept="image/*" onChange={handleImageChange} />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                label="Encryption Key"
+                variant="outlined"
+                fullWidth
+                value={key}
+                onChange={handleKeyChange}
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <Button variant="contained" onClick={() => processImage(true)} disabled={processing}>
+                {processing ? <CircularProgress size={24} /> : 'Encrypt Image'}
+              </Button>
+            </Grid>
+          </Grid>
+        )}
+        {selectedTab === 1 && (
+          <Grid container spacing={2}>
+            <Grid item xs={12}>
+              <input type="file" accept="image/*" onChange={handleImageChange} />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                label="Decryption Key"
+                variant="outlined"
+                fullWidth
+                value={key}
+                onChange={handleKeyChange}
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <Button variant="contained" onClick={() => processImage(false)} disabled={processing}>
+                {processing ? <CircularProgress size={24} /> : 'Decrypt Image'}
+              </Button>
+            </Grid>
+          </Grid>
+        )}
+        {errorMessage && <Typography color="error">{errorMessage}</Typography>}
+        {processedImage && !errorMessage && (
+          <div>
+            {/* <img src={processedImage} alt={isEncrypted ? 'Encrypted' : 'Decrypted'} /> */}
+            <br></br>
+            <Button variant="contained" onClick={downloadImage}>
+              Download {isEncrypted ? 'Encrypted' : 'Decrypted'} Image
+            </Button>
+          </div>
+        )}
+      </div>
+      <Button onClick={handleCloudSave}>Cloud Save</Button>
+    </Container>
+  );
+};
 
-//     for (let i = 0; i < data.length; i += 4) {
-//       const chaosKey = chaosMap.encrypt(i, key); // Use chaos map for generating dynamic key
-//       data[i] = chaoticXOR(data[i], key, chaosKey);
-//       data[i + 1] = chaoticXOR(data[i + 1], key, chaosKey);
-//       data[i + 2] = chaoticXOR(data[i + 2], key, chaosKey);
-//     }
-
-//     ctx.putImageData(imageData, 0, 0);
-//     const decryptedDataURL = canvas.toDataURL('image/png');
-//     setEncryptedImage(decryptedDataURL);
-//   };
-
-//   return (
-//     <div>
-//       <input type="file" onChange={handleImageChange} />
-//       <br />
-//       <label>
-//         Enter Key:
-//         <input type="text" value={key} onChange={handleKeyChange} />
-//       </label>
-//       <br />
-//       <button onClick={encryptImage}>Encrypt Image</button>
-//       <button onClick={decryptImage}>Decrypt Image</button>
-//       <br />
-//       {image && <img src={image.src} alt="Original" />}
-//       {encryptedImage && <img src={encryptedImage} alt="Encrypted/Decrypted" />}
-//     </div>
-//   );
-// };
-
-// export default ImageEncryptor;
+export default XOREncryption;
