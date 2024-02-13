@@ -3,10 +3,6 @@ use std::net::{TcpListener, TcpStream};
 use std::io::{Read, Write};
 use std::fs;
 use std::path::Path;
-
-mod config;
-
-
 #[macro_use]
 extern crate serde_derive;
 #[derive(Serialize, Deserialize)]
@@ -19,6 +15,7 @@ struct User {
     email: String,
     password: String,
 }
+
 
 // mod config;
 const OK_RESPONSE: &str = "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods:POST, GET, PUT, DELETE\r\nAccess-Control-Allow-Headers: Content-Type\r\n\r\n";
