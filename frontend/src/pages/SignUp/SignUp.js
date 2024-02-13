@@ -1,4 +1,4 @@
-import * as React from 'react';
+import React , {useState} from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import Avatar from '@mui/material/Avatar';
@@ -33,6 +33,7 @@ const defaultTheme = createTheme();
 
 export default function SignUp() {
   const navigate =useNavigate();
+  const [wait,setWait] = useState(null);
   
   // React.useEffect(()=>{
   //   axios.get("https://rustbackend.onrender.com/api/rust/users")
@@ -41,14 +42,15 @@ export default function SignUp() {
 
   const handleSubmit = (event) => {
     event.preventDefault();
+    setWait(1);
     const data = new FormData(event.currentTarget);
-    
     const firstName = data.get('firstName');
     const lastName = data.get('lastName');
     const email = data.get('email');
     const username = data.get('username');
     const password = data.get('password');
     
+    console.log(wait);
     axios.post("https://rustbackend.onrender.com/api/rust/users", {
       firstname:firstName,
       lastname:lastName,
@@ -56,8 +58,14 @@ export default function SignUp() {
       email,
       password
     })
-        .then((response) =>navigate('/')) 
-        .catch((err) => alert("invalid User..."));
+    .then((response) => {
+      setWait(0); // Set loading state back to 0 after the request is completed
+      navigate('/'); // Navigate to the home page after successful submission
+    })
+    .catch((err) => {
+      setWait(0); // Set loading state back to 0 if there's an error
+      alert("Invalid User..."); // Show an alert for invalid user
+    });
 
   };
 
@@ -79,6 +87,7 @@ export default function SignUp() {
           <Typography component="h1" variant="h5">
             Sign up
           </Typography>
+          {/* <p>Since deployed on Render..the very first call may take upto few seconds...please wait!!</p> */}
           <Box component="form" onSubmit={handleSubmit} noValidate sx={{ mt: 1 }}>
             <Grid container spacing={2}>
               <Grid item xs={12} sm={6}>
@@ -146,6 +155,7 @@ export default function SignUp() {
             >
               Sign Up
             </Button>
+            {wait === 1 ? <p>"Please wait a moment as the very first call may take a few seconds due to deployment on Render."</p>:null}
             <Grid container justifyContent="flex-end">
               <Grid item>
                 <Link to="/"  variant="body2">
