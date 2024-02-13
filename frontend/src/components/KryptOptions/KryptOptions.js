@@ -6,7 +6,9 @@ import Typography from "@mui/material/Typography";
 import Grid from "@mui/material/Grid";
 import TextsmsIcon from "@mui/icons-material/Textsms";
 import ImageSearchIcon from "@mui/icons-material/ImageSearch";
-import QrCodeIcon from "@mui/icons-material/QrCode";
+// import ImageBitmap from ""
+import LockIcon from '@mui/icons-material/Lock';
+// import QrCodeIcon from "@mui/icons-material/QrCode";
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
 import { useTheme } from "@mui/material/styles";
 import useMediaQuery from "@mui/material/useMediaQuery";
@@ -29,10 +31,10 @@ const KryptOption = () => {
       icon: <ImageSearchIcon fontSize="large" />,
     },
     {
-      name: "qrCode",
+      name: "ImageEncryption",
       link: "",
-      description: "Generate and scan QR codes.Generate and scan QR codes.Generate and scan QR codes.",
-      icon: <QrCodeIcon fontSize="large" />,
+      description: "Hide your image content by encrypting it and converting it to invalid format. Decrypt to recover the image",
+      icon: <LockIcon fontSize="large" />,
     },
   ];
 
