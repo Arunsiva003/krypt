@@ -1,7 +1,6 @@
 use postgres::{Client, NoTls};
 use std::net::{TcpListener, TcpStream};
 use std::io::{Read, Write};
-use std::fs;
 #[macro_use]
 extern crate serde_derive;
 #[derive(Serialize, Deserialize)]
@@ -46,22 +45,22 @@ fn main() {
     }
 }
 
-fn set_database() -> Result<(), postgres::Error> {
-    let mut client = Client::connect(DB_URL, NoTls)?;
-    client.batch_execute(
-        "
-        CREATE TABLE IF NOT EXISTS users (
-            id SERIAL PRIMARY KEY,
-            firstname VARCHAR NOT NULL,
-            lastname VARCHAR NOT NULL,
-            username VARCHAR NOT NULL,
-            email VARCHAR NOT NULL,
-            password VARCHAR NOT NULL
-        )
-    ",
-    )?;
-    Ok(())
-}
+// fn set_database() -> Result<(), postgres::Error> {
+//     let mut client = Client::connect(DB_URL, NoTls)?;
+//     client.batch_execute(
+//         "
+//         CREATE TABLE IF NOT EXISTS users (
+//             id SERIAL PRIMARY KEY,
+//             firstname VARCHAR NOT NULL,
+//             lastname VARCHAR NOT NULL,
+//             username VARCHAR NOT NULL,
+//             email VARCHAR NOT NULL,
+//             password VARCHAR NOT NULL
+//         )
+//     ",
+//     )?;
+//     Ok(())
+// }
 
 fn handle_client(mut stream: TcpStream) {
     const BUFFER_SIZE: usize = 4096;
@@ -348,6 +347,7 @@ fn handle_login_request(request: &str) -> (String, String) {
 
 fn handle_get_text_image_request(request: &str) -> (String, String) {
     // Parse the request to extract the user ID from the URL path
+    println!("in get text image{:?}", request);
     let path_parts: Vec<&str> = request.split(' ').collect();
     let user_id: i32 = path_parts.get(1).unwrap_or(&"").trim_start_matches("/api/rust/textimage/").parse().expect("err in conv");
 
@@ -391,8 +391,13 @@ fn handle_get_text_image_request(request: &str) -> (String, String) {
 
 fn handle_get_text_request(request: &str) -> (String, String) {
     // Parse the request to extract the user ID from the URL path
+    println!("in get text req:{:?}", request);
+
     let path_parts: Vec<&str> = request.split(' ').collect();
     let user_id: i32 = path_parts.get(1).unwrap_or(&"").trim_start_matches("/api/rust/text/").parse().expect("err in conv");
+    println!("in get text pathParts:{:?}", path_parts);
+    println!("in get text userid:{:?}", user_id);
+
 
     // Establish a connection to the database
     let mut client = match Client::connect(DB_URL, NoTls) {
