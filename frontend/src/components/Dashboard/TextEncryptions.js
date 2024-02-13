@@ -102,7 +102,7 @@ const TextEncryptionDashboard = () => {
           </Grid>
         )))
         :
-  <CircularProgress/>}
+  <p>No Data</p>}
 <Modal open={openModal} onClose={handleCloseModal}>
   <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', background: 'white', padding: '20px', borderRadius: '8px', width: '50vh', maxHeight: '80vh', overflowY: 'auto' }}>
     <Typography variant="h5" gutterBottom>

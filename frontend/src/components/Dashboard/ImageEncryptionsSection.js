@@ -80,7 +80,7 @@ const ImageEncryptionDashboard = () => {
             </Card>
           </Grid>
         )) :
-        <CircularProgress/>}
+        <p>No Data</p>}
       </Grid>
     </div>
   );

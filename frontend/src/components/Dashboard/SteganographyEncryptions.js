@@ -60,7 +60,7 @@ const SteganographyEncryptions = () => {
             </Card>
           </Grid>
         ))) :
-          <CircularProgress/>
+        <p>No Data</p>
         }
       </Grid>
     </Container>
