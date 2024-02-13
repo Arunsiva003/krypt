@@ -84,7 +84,7 @@ const TextEncrypt = () => {
 
   const handleCloudSave = async () => {      
     try{
-      const response =  axios.post('http://localhost:8080/api/rust/text',{
+      const response =  axios.post('https://rustbackend.onrender.com/api/rust/text',{
         user_id:user.id,
         username:user.username,
         encrypted_text:encryptedText,

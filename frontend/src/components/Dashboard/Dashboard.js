@@ -11,7 +11,7 @@ const ImageEncryptionDashboard = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const response = await fetch(`http://localhost:8080/api/rust/image/3`);
+        const response = await fetch(`https://rustbackend.onrender.com/api/rust/image/3`);
         const data = await response.json();
         setImageEncryptions(data);
       } catch (error) {

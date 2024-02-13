@@ -15,7 +15,7 @@ const TextEncryptionDashboard = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const response = axios.get(`http://localhost:8080/api/rust/text/${user.id}`)
+        const response = axios.get(`https://rustbackend.onrender.com/api/rust/text/${user.id}`)
         .then((res)=>setTextEncryptions(res.data));
         // const data = await response.json();
         // setTextEncryptions(data);

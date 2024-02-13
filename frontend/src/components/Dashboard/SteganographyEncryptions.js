@@ -14,7 +14,7 @@ const SteganographyEncryptions = () => {
 
     const fetchData = async () => {
       try {
-        const response = axios.get(`http://localhost:8080/api/rust/textimage/${user.id}`)
+        const response = axios.get(`https://rustbackend.onrender.com/api/rust/textimage/${user.id}`)
         .then((res)=>setEncryptions(res.data));
       } catch (error) {
         console.error('Error fetching encryption data:', error);

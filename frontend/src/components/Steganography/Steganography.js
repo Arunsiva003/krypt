@@ -199,7 +199,7 @@ const Steganography = () => {
       
     try{
       console.log("cloud upload link",cloudUploadLink);
-      const response =  axios.post('http://localhost:8080/api/rust/textimage',{
+      const response =  axios.post('https://rustbackend.onrender.com/api/rust/textimage',{
         user_id:user.id,
         username:user.username,
         encrypted_image_link:imageUrl,

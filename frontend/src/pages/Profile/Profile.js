@@ -21,7 +21,7 @@ const ProfileComponent = () => {
     // Fetch user data from the backend
     const fetchUserData = async () => {
       try {
-        const response = await axios.get(`http://localhost:8080/api/rust/users/${user.id}`);
+        const response = await axios.get(`https://rustbackend.onrender.com/api/rust/users/${user.id}`);
         setUserData(response.data);
       } catch (error) {}
     };
@@ -36,7 +36,7 @@ const ProfileComponent = () => {
   const updateUserProfile = async (userData) => {
     // Update user profile data in the backend
     try {
-      await axios.put(`http://localhost:8080/api/rust/users/${user.id}`, userData);
+      await axios.put(`https://rustbackend.onrender.com/api/rust/users/${user.id}`, userData);
       setUser(userData);
     } catch (error) {
       console.error('Error updating user profile:', error);

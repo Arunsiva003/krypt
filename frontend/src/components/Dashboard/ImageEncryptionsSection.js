@@ -14,7 +14,7 @@ const ImageEncryptionDashboard = () => {
   useEffect(() => {
     const fetchData = ()=> {
       try {
-        axios.get(`http://localhost:8080/api/rust/image/${user.id}`)
+        axios.get(`https://rustbackend.onrender.com/api/rust/image/${user.id}`)
         .then((res)=>setImageEncryptions(res.data));
       } catch (error) {
         console.error('Error fetching image encryptions:', error);
