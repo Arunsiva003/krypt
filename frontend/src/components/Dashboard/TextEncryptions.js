@@ -3,28 +3,29 @@ import { Typography, Grid, Card, CardContent, TextField, IconButton, Modal, Butt
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import FileCopyIcon from '@mui/icons-material/FileCopy';
+import DeleteIcon from '@mui/icons-material/Delete';
 import axios from 'axios';
 import UserContext from '../../UserContext';
-
 
 const TextEncryptionDashboard = () => {
   const [textEncryptions, setTextEncryptions] = useState([]);
   const [openModal, setOpenModal] = useState(false);
   const [selectedText, setSelectedText] = useState('');
   const {user} = useContext(UserContext);
+  const [isLoading, setIsLoading] = useState(true);
+ 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const response = axios.get(`https://rustbackend.onrender.com/api/rust/text/${user.id}`)
-        .then((res)=>setTextEncryptions(res.data));
-        // const data = await response.json();
-        // setTextEncryptions(data);
+        const response = await axios.get(`https://rustbackend.onrender.com/api/rust/text/${user.id}`);
+        setTextEncryptions(response.data);
+        setIsLoading(false);
       } catch (error) {
         console.error('Error fetching encryption data:', error);
       }
     };
     fetchData();
-  }, []);
+  }, [user.id]);
 
   const handleDownloadTextFile = (encryptedText, id) => {
     const blob = new Blob([encryptedText], { type: 'text/plain' });
@@ -53,71 +54,87 @@ const TextEncryptionDashboard = () => {
     passwordField.type = passwordField.type === 'text' ? 'password' : 'text';
   };
 
+  const handleDelete = async (id) => {
+    try {
+      await axios.delete(`https://rustbackend.onrender.com/api/rust/text/${id}`);
+      setTextEncryptions(textEncryptions.filter(encryption => encryption.id !== id));
+      alert('Encryption deleted successfully.');
+    } catch (error) {
+      console.error('Error deleting encryption:', error);
+      alert('An error occurred while deleting the encryption. Please try again.');
+    }
+  };
+
   return (
     <Container style={{ padding: '20px' }}>
       <Typography variant="h4" align="center" gutterBottom>
         Text Encryptions
       </Typography>
-      <Grid container spacing={2}>
-
-      {textEncryptions.length!=0 ? 
-        (textEncryptions.map((encryption) => (
-          <Grid item key={encryption.id} xs={12} sm={6} md={4} lg={3}>
-            <Card>
-              <CardContent>
-                <Typography variant="h6" gutterBottom>
-                  Encrypted Text
-                </Typography>
-                <Typography variant="body1" paragraph>
-                  {encryption.encrypted_text.length > 100
-                    ? `${encryption.encrypted_text.substring(0, 100)}...`
-                    : encryption.encrypted_text}
-                </Typography>
-                {encryption.encrypted_text.length > 100 && (
-                  <IconButton size="small" onClick={() => handleViewFullText(encryption.encrypted_text)}>
-                    <VisibilityIcon />
-                  </IconButton>
-                )}
-                <Typography variant="h6" gutterBottom>
-                  Key Used
-                </Typography>
-                <TextField
-                  id={`password-${encryption.id}`}
-                  type="password"
-                  value={encryption.key_used}
-                  InputProps={{
-                    readOnly: true,
-                  }}
-                />
-                <IconButton size="small" onClick={() => togglePasswordVisibility(encryption.id)}>
-                  {encryption.showPassword ? <VisibilityOffIcon /> : <VisibilityIcon />}
-                </IconButton>
-                <br />
-                <br />
-                <Button onClick={() => handleDownloadTextFile(encryption.encrypted_text, encryption.id)}>
-                  Download Encrypted Text
-                </Button>
-              </CardContent>
-            </Card>
-          </Grid>
-        )))
-        :
-  <p>No Data</p>}
-<Modal open={openModal} onClose={handleCloseModal}>
-  <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', background: 'white', padding: '20px', borderRadius: '8px', width: '50vh', maxHeight: '80vh', overflowY: 'auto' }}>
-    <Typography variant="h5" gutterBottom>
-      Full Encrypted Text
-    </Typography>
-    <div style={{ whiteSpace: 'pre-wrap', overflowY: 'auto', maxHeight: 'calc(80vh - 100px)' }}>{selectedText}</div>
-    <Button onClick={handleCopyToClipboard} style={{ marginTop: '10px' }}>
-      <FileCopyIcon />
-      Copy to Clipboard
-    </Button>
-  </div>
-</Modal>
-
-
-      </Grid>
+      {isLoading ? (
+        <div style={{ display: 'flex', justifyContent: 'center' }}>
+          <CircularProgress size={30} />
+        </div>
+      ) : (
+        <Grid container spacing={2}>
+          {textEncryptions.length !== 0 ? (
+            textEncryptions.map((encryption) => (
+              <Grid item key={encryption.id} xs={12} sm={6} md={4} lg={3}>
+                <Card>
+                  <CardContent>
+                    <Typography variant="h6" gutterBottom>
+                      Encrypted Text
+                    </Typography>
+                    <Typography variant="body1" paragraph>
+                      {encryption.encrypted_text.length > 100
+                        ? `${encryption.encrypted_text.substring(0, 100)}...`
+                        : encryption.encrypted_text}
+                    </Typography>
+                    {encryption.encrypted_text.length > 100 && (
+                      <IconButton size="small" onClick={() => handleViewFullText(encryption.encrypted_text)}>
+                        <VisibilityIcon />
+                      </IconButton>
+                    )}
+                    <Typography variant="h6" gutterBottom>
+                      Key Used
+                    </Typography>
+                    <TextField
+                      id={`password-${encryption.id}`}
+                      type="password"
+                      value={encryption.key_used}
+                      InputProps={{
+                        readOnly: true,
+                      }}
+                    />
+                    <IconButton size="small" onClick={() => togglePasswordVisibility(encryption.id)}>
+                      {encryption.showPassword ? <VisibilityOffIcon /> : <VisibilityIcon />}
+                    </IconButton>
+                    <br />
+                    <br />
+                    <Button onClick={() => handleDownloadTextFile(encryption.encrypted_text, encryption.id)}>
+                      Download Encrypted Text
+                    </Button>
+                    <IconButton onClick={() => handleDelete(encryption.id)}><DeleteIcon /></IconButton>
+                  </CardContent>
+                </Card>
+              </Grid>
+            ))
+          ) : (
+            <Typography variant="body1" align="center">No Data</Typography>
+          )}
+        </Grid>
+      )}
+      <Modal open={openModal} onClose={handleCloseModal}>
+        <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', background: 'white', padding: '20px', borderRadius: '8px', width: '50vh', maxHeight: '80vh', overflowY: 'auto' }}>
+          <Typography variant="h5" gutterBottom>
+            Full Encrypted Text
+          </Typography>
+          <div style={{ whiteSpace: 'pre-wrap', overflowY: 'auto', maxHeight: 'calc(80vh - 100px)' }}>{selectedText}</div>
+          <Button onClick={handleCopyToClipboard} style={{ marginTop: '10px' }}>
+            <FileCopyIcon />
+            Copy to Clipboard
+          </Button>
+        </div>
+      </Modal>
     </Container>
   );
 };

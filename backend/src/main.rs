@@ -117,6 +117,7 @@ fn handle_client(mut stream: TcpStream) {
         r if r.starts_with("PUT /api/rust/users/") => handle_update_request(r),
         r if r.starts_with("POST /api/rust/users/login") => handle_login_request(r),
         r if r.starts_with("POST /api/rust/users") => handle_post_request(r),
+        r if r.starts_with("DELETE /api/rust/") => handle_delete_request(r),
         _ => (NOT_FOUND.to_string(), "404 not found".to_string()),
     };
 
@@ -649,6 +650,48 @@ fn handle_image_encrypted_image_save_request(request: &str) -> (String, String) 
         }
     }
 }
+
+fn handle_delete_request(request: &str) -> (String, String) {
+    // Parse the request to extract the resource type and ID from the URL path
+    let path_parts: Vec<&str> = request.split(' ').collect();
+    let resource_type = path_parts.get(1).and_then(|part| part.split('/').nth(3));
+    let resource_id: i32 = path_parts
+        .get(1)
+        .and_then(|part| part.split('/').last())
+        .and_then(|id| id.parse().ok())
+        .unwrap_or_default();
+
+    // Establish a connection to the database
+    let mut client = match Client::connect(DB_URL, NoTls) {
+        Ok(client) => client,
+        Err(_) => {
+            return (INTERNAL_ERROR.to_string(), "Failed to connect to the database".to_string());
+        }
+    };
+
+    // Determine the appropriate table based on the resource type
+    let table_name = match resource_type {
+        Some("textimage") => "text_to_image",
+        Some("text") => "text_to_text", // Adjust this based on your actual table name
+        Some("image") => "image_to_image", // Adjust this based on your actual table name
+        _ => return (NOT_FOUND.to_string(), "Invalid resource type".to_string()),
+    };
+
+    // Perform the delete operation
+    let mut content = String::new();
+    match client.execute(&format!("DELETE FROM {} WHERE id = $1", table_name), &[&resource_id]) {
+        Ok(_) => content = format!("[{}] Deleted Successfully", resource_type.unwrap_or("Unknown")),
+        Err(_) => return (INTERNAL_ERROR.to_string(), "Failed to delete record from the database".to_string()),
+    };
+
+    (OK_RESPONSE.to_string(), content)
+}
+
+
+
+
+
+
 
 
 
