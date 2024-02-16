@@ -14,8 +14,6 @@ struct User {
     password: String,
 }
 
-
-// mod config;
 const OK_RESPONSE: &str = "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods:POST, GET, PUT, DELETE\r\nAccess-Control-Allow-Headers: Content-Type\r\n\r\n";
 const NOT_FOUND: &str = "HTTP/1.1 404 NOT FOUND\r\n\r\n";
 const INTERNAL_ERROR: &str = "HTTP/1.1 500 INTERNAL ERROR\r\n\r\n";
@@ -24,13 +22,13 @@ const DB_URL:&str = "postgresql://uu09n2xc646nt4vczmt7:bTb9GyWabKOZ5h499cnEeIZXM
 
 fn main() {
     // if let Err(x) = set_database() {
-    //     println!("{}", x);
-    //     println!("Error setting database");
+        // println!("{}", x);
+        // println!("Error setting database");
     //     return;
     // }
 
     let listener = TcpListener::bind(format!("0.0.0.0:8080")).unwrap();
-    println!("Server listening on port 8080");
+    // println!("Server listening on port 8080");
 
     for stream in listener.incoming() {
         match stream {
@@ -95,7 +93,7 @@ fn handle_client(mut stream: TcpStream) {
         }
     }
 
-    println!("Full request: {}", request);
+    // println!("Full request: {}", request);
 
     let (status_line, content) = match &*request {
         r if r.starts_with("OPTIONS ") => (OK_RESPONSE.to_string(), "".to_string()), //options - to deal cors policy
@@ -122,19 +120,19 @@ fn handle_client(mut stream: TcpStream) {
     };
 
     let response = format!("{}{}", status_line, content);
-    println!("\nresponse in handleClient:{}\n", response);
+    // println!("\nresponse in handleClient:{}\n", response);
     stream.write_all(response.as_bytes()).unwrap();
 }
 
 fn handle_post_request(request: &str) -> (String, String) {
-    println!("got request");
+    // println!("got request");
     match get_user_request_body(request) {
         Ok(user) => {
-            println!("got user");
+            // println!("got user");
             // Establish a connection to the database
             let mut client = match Client::connect(DB_URL, NoTls) {
                 Ok(client) =>{
-                    println!("got client");
+                    // println!("got client");
                     client
                 },
                 Err(_) => return (INTERNAL_ERROR.to_string(), "Internal error".to_string()),
@@ -155,7 +153,7 @@ fn handle_post_request(request: &str) -> (String, String) {
                 &[&user.firstname, &user.lastname, &user.username, &user.email, &user.password]
             ) {
                 Ok(row) => {
-                    println!("got row");
+                    // println!("got row");
                     let user_id: i32 = row.get(0);
                     let user_id = user_id.to_string(); 
                     handle_get_user_request(&user_id)
@@ -164,7 +162,7 @@ fn handle_post_request(request: &str) -> (String, String) {
                         //     &[&user_id],
                         // ) {
                     //     Ok(row) => {
-                    //         println!("got row user");
+                            // println!("got row user");
                     //         let user = User {
                         //             id: row.get(0),
                         //             firstname: row.get(1),
@@ -195,7 +193,7 @@ fn handle_get_user_request(user_id: &str) -> (String, String) {
     };
     
     // Query the database to get user details based on ID
-    println!("user is ####################{}",user_id);
+    // println!("user is ####################{}",user_id);
     let user_id: i32 = user_id.trim().parse().unwrap();
     match client.query_opt(
         "SELECT id, firstname, lastname, username, email, password FROM users WHERE id = $1",
@@ -225,7 +223,7 @@ fn handle_update_request(request: &str) -> (String, String) {
     } else {
         return (NOT_FOUND.to_string(), "Invalid request body".to_string());
     }
-    println!("put user id :{}", id);
+    // println!("put user id :{}", id);
     match get_user_request_body(request) {
         Ok(user) => {
             match Client::connect(DB_URL, NoTls) {
@@ -270,7 +268,7 @@ fn handle_update_request(request: &str) -> (String, String) {
 }
 
 fn handle_get_all_request(_request: &str) -> (String, String) {
-    println!("getting users db");
+    // println!("getting users db");
     match Client::connect(DB_URL, NoTls) {
         Ok(mut client) => {
             let mut users = Vec::new();
@@ -295,28 +293,28 @@ fn handle_get_all_request(_request: &str) -> (String, String) {
 fn handle_login_request(request: &str) -> (String, String) {
     
     let request = request.split("\r\n\r\n").last().unwrap_or_default();
-    println!("inside hnadlelogin {}",request);
+    // println!("inside hnadlelogin {}",request);
     match serde_json::from_str::<serde_json::Value>(&request) {
         Ok(request_json) => {
             // Extract email and password from the JSON request
             let email = request_json.get("email").and_then(|v| v.as_str());
             let password = request_json.get("password").and_then(|v| v.as_str());
             
-            println!("{:?}--{:?}",email, password);
+            // println!("{:?}--{:?}",email, password);
             match (email, password) {
                 
                 (Some(email), Some(password)) => {
-                    println!("validation----{:?}--{:?}",email, password);
+                    // println!("validation----{:?}--{:?}",email, password);
                     match Client::connect(DB_URL, NoTls) {
                         Ok(mut client) => {
                             // Check if the provided email and password match any user in the database
-                            println!("before validation: {},{}",email,password);
+                            // println!("before validation: {},{}",email,password);
                             match client.query_opt(
                                 "SELECT id, firstname, lastname, username, email, password FROM users WHERE email = $1 AND password = $2",
                                 &[&email, &password],
                             ) {
                                 Ok(Some(row)) => {
-                                    println!("############validated#############");
+                                    // println!("############validated#############");
                                     let authenticated_user = User {
                                         id: row.get(0),
                                         firstname: row.get(1),
@@ -338,7 +336,7 @@ fn handle_login_request(request: &str) -> (String, String) {
             }
         }
         Err(err) => {
-            eprintln!("Error parsing JSON -- : {:?}", err);
+            // eprintln!("Error parsing JSON -- : {:?}", err);
             (INTERNAL_ERROR.to_string(), "Error parsing JSON".to_string())
         }
     }
@@ -480,29 +478,29 @@ fn handle_get_image_request(request: &str) -> (String, String) {
 fn handle_text_encrypted_image_save_request(request: &str) -> (String, String) {
     // Extract the JSON part of the request body
     let json_body = request.split("\r\n\r\n").last().unwrap_or_default();
-    println!("JSON Body: {}", json_body);
+    // println!("JSON Body: {}", json_body);
 
     // Parse the JSON string
     match serde_json::from_str::<serde_json::Value>(json_body) {
         Ok(request_json) => {
-            println!("Parsed JSON: {:?}", request_json);
+            // println!("Parsed JSON: {:?}", request_json);
 
             // Extract user_id, username, encrypted_image_link, and key_used from the JSON request
             let user_id = request_json.get("user_id").and_then(|v| v.as_i64());
             let username = request_json.get("username").and_then(|v| v.as_str());
             let encrypted_image_link = request_json.get("encrypted_image_link").and_then(|v| v.as_str());
             let key_used = request_json.get("key_used").and_then(|v| v.as_str());
-            println!("{:?}",user_id);
-            println!("{:?}",username);
-            println!("{:?}",encrypted_image_link);
+            // println!("{:?}",user_id);
+            // println!("{:?}",username);
+            // println!("{:?}",encrypted_image_link);
             // Check if all required fields are present
             if let (Some(user_id), Some(username), Some(encrypted_image_link), Some(key_used)) =
                 (user_id, username, encrypted_image_link, key_used)
             {
                 // Establish a connection to the database
-            println!("{:?}",user_id);
-            println!("{:?}",username);
-            println!("{:?}",encrypted_image_link);
+            // println!("{:?}",user_id);
+            // println!("{:?}",username);
+            // println!("{:?}",encrypted_image_link);
             let user_id: i32 = user_id as i32;
 
             // let user_id: i32 = user_id; // to suit postgres data type
@@ -517,7 +515,7 @@ fn handle_text_encrypted_image_save_request(request: &str) -> (String, String) {
                         ) {
                             Ok(_) => (OK_RESPONSE.to_string(), "Data stored successfully".to_string()),
                             Err(err) =>{
-                                println!("{:?}",err);
+                                // println!("{:?}",err);
                                 (INTERNAL_ERROR.to_string(), "Failed to store data".to_string())
                             }
                         }
@@ -529,7 +527,7 @@ fn handle_text_encrypted_image_save_request(request: &str) -> (String, String) {
             }
         }
         Err(err) => {
-            eprintln!("Error parsing JSON in textImage: {:?}", err);
+            // eprintln!("Error parsing JSON in textImage: {:?}", err);
             (INTERNAL_ERROR.to_string(), "Error parsing JSON in textImage".to_string())
         }
     }
@@ -538,29 +536,29 @@ fn handle_text_encrypted_image_save_request(request: &str) -> (String, String) {
 fn handle_text_encrypted_text_save_request(request: &str) -> (String, String) {
     // Extract the JSON part of the request body
     let json_body = request.split("\r\n\r\n").last().unwrap_or_default();
-    println!("JSON Body: {}", json_body);
+    // println!("JSON Body: {}", json_body);
 
     // Parse the JSON string
     match serde_json::from_str::<serde_json::Value>(json_body) {
         Ok(request_json) => {
-            println!("Parsed JSON: {:?}", request_json);
+            // println!("Parsed JSON: {:?}", request_json);
 
             // Extract user_id, username, encrypted_text, and key_used from the JSON request
             let user_id = request_json.get("user_id").and_then(|v| v.as_i64());
             let username = request_json.get("username").and_then(|v| v.as_str());
             let encrypted_text = request_json.get("encrypted_text").and_then(|v| v.as_str());
             let key_used = request_json.get("key_used").and_then(|v| v.as_str());
-            println!("{:?}",user_id);
-            println!("{:?}",username);
-            println!("{:?}",encrypted_text);
+            // println!("{:?}",user_id);
+            // println!("{:?}",username);
+            // println!("{:?}",encrypted_text);
             // Check if all required fields are present
             if let (Some(user_id), Some(username), Some(encrypted_text), Some(key_used)) =
                 (user_id, username, encrypted_text, key_used)
             {
                 // Establish a connection to the database
-            println!("{:?}",user_id);
-            println!("{:?}",username);
-            println!("{:?}",encrypted_text);
+            // println!("{:?}",user_id);
+            // println!("{:?}",username);
+            // println!("{:?}",encrypted_text);
             let user_id: i32 = user_id as i32;
 
             // let user_id: i32 = user_id; // to suit postgres data type
@@ -575,7 +573,7 @@ fn handle_text_encrypted_text_save_request(request: &str) -> (String, String) {
                         ) {
                             Ok(_) => (OK_RESPONSE.to_string(), "Data stored successfully".to_string()),
                             Err(err) =>{
-                                println!("{:?}",err);
+                                // println!("{:?}",err);
                                 (INTERNAL_ERROR.to_string(), "Failed to store data".to_string())
                             }
                         }
@@ -587,7 +585,7 @@ fn handle_text_encrypted_text_save_request(request: &str) -> (String, String) {
             }
         }
         Err(err) => {
-            eprintln!("Error parsing JSON in textImage: {:?}", err);
+            // eprintln!("Error parsing JSON in textImage: {:?}", err);
             (INTERNAL_ERROR.to_string(), "Error parsing JSON in textImage".to_string())
         }
     }
@@ -596,29 +594,29 @@ fn handle_text_encrypted_text_save_request(request: &str) -> (String, String) {
 fn handle_image_encrypted_image_save_request(request: &str) -> (String, String) {
     // Extract the JSON part of the request body
     let json_body = request.split("\r\n\r\n").last().unwrap_or_default();
-    println!("JSON Body: {}", json_body);
+    // println!("JSON Body: {}", json_body);
 
     // Parse the JSON string
     match serde_json::from_str::<serde_json::Value>(json_body) {
         Ok(request_json) => {
-            println!("Parsed JSON: {:?}", request_json);
+            // println!("Parsed JSON: {:?}", request_json);
 
             // Extract user_id, username, encrypted_image_link, and key_used from the JSON request
             let user_id = request_json.get("user_id").and_then(|v| v.as_i64());
             let username = request_json.get("username").and_then(|v| v.as_str());
             let encrypted_image_link = request_json.get("encrypted_image_link").and_then(|v| v.as_str());
             let key_used = request_json.get("key_used").and_then(|v| v.as_str());
-            println!("{:?}",user_id);
-            println!("{:?}",username);
-            println!("{:?}",encrypted_image_link);
+            // println!("{:?}",user_id);
+            // println!("{:?}",username);
+            // println!("{:?}",encrypted_image_link);
             // Check if all required fields are present
             if let (Some(user_id), Some(username), Some(encrypted_image_link), Some(key_used)) =
                 (user_id, username, encrypted_image_link, key_used)
             {
                 // Establish a connection to the database
-            println!("{:?}",user_id);
-            println!("{:?}",username);
-            println!("{:?}",encrypted_image_link);
+            // println!("{:?}",user_id);
+            // println!("{:?}",username);
+            // println!("{:?}",encrypted_image_link);
             let user_id: i32 = user_id as i32;
 
             // let user_id: i32 = user_id; // to suit postgres data type
@@ -633,7 +631,7 @@ fn handle_image_encrypted_image_save_request(request: &str) -> (String, String) 
                         ) {
                             Ok(_) => (OK_RESPONSE.to_string(), "Data stored successfully".to_string()),
                             Err(err) =>{
-                                println!("{:?}",err);
+                                // println!("{:?}",err);
                                 (INTERNAL_ERROR.to_string(), "Failed to store data".to_string())
                             }
                         }
@@ -645,7 +643,7 @@ fn handle_image_encrypted_image_save_request(request: &str) -> (String, String) 
             }
         }
         Err(err) => {
-            eprintln!("Error parsing JSON in textImage: {:?}", err);
+            // eprintln!("Error parsing JSON in textImage: {:?}", err);
             (INTERNAL_ERROR.to_string(), "Error parsing JSON in textImage".to_string())
         }
     }
@@ -662,7 +660,7 @@ fn handle_delete_request(request: &str) -> (String, String) {
         .unwrap_or_default();
 
     // Establish a connection to the database
-    println!("{:?}",resource_type);
+    // println!("{:?}",resource_type);
     let mut client = match Client::connect(DB_URL, NoTls) {
         Ok(client) => client,
         Err(_) => {
@@ -676,7 +674,7 @@ fn handle_delete_request(request: &str) -> (String, String) {
         Some("text") => "text_to_text", // Adjust this based on your actual table name
         Some("image") => "image_to_image", // Adjust this based on your actual table name
         _ =>{
-            println!("Match not found############");
+            // println!("Match not found############");
             return (NOT_FOUND.to_string(), "Invalid resource type".to_string());
         },
     };
@@ -709,12 +707,12 @@ fn handle_delete_request(request: &str) -> (String, String) {
 
 
 fn get_user_request_body(request: &str) -> Result<User, serde_json::Error> {
-    println!("request in get user body \n{}\n\n",request);
+    // println!("request in get user body \n{}\n\n",request);
     let json_str = request.split("\r\n\r\n").last().unwrap_or_default();
-    println!("request in get user body (json){}\n\n",json_str);   
+    // println!("request in get user body (json){}\n\n",json_str);   
     // Deserialize the JSON string into a User struct
     serde_json::from_str(json_str).map_err(|err| {
-        eprintln!("Error parsing JSON(in reqBody):  {:?}", err);
+        // eprintln!("Error parsing JSON(in reqBody):  {:?}", err);
         err
     })
 }
@@ -739,9 +737,9 @@ fn parse_user_id(request: &str) -> Option<i32> {
     // Extract user ID from the request path
     
     let path_parts: Vec<&str> = request.split('/').collect();
-    println!("{:?}",path_parts);
+    // println!("{:?}",path_parts);
     if path_parts.len() >= 5 && path_parts[3] == "users" {
-        println!("######path paths 4: {}",path_parts[4]);
+        // println!("######path paths 4: {}",path_parts[4]);
         if let Ok(id) = path_parts[4].split_whitespace().next().unwrap().parse::<i32>() {
             return Some(id);
         }
