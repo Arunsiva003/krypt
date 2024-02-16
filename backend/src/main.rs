@@ -662,6 +662,7 @@ fn handle_delete_request(request: &str) -> (String, String) {
         .unwrap_or_default();
 
     // Establish a connection to the database
+    println!("{:?}",resource_type);
     let mut client = match Client::connect(DB_URL, NoTls) {
         Ok(client) => client,
         Err(_) => {
@@ -674,7 +675,10 @@ fn handle_delete_request(request: &str) -> (String, String) {
         Some("textimage") => "text_to_image",
         Some("text") => "text_to_text", // Adjust this based on your actual table name
         Some("image") => "image_to_image", // Adjust this based on your actual table name
-        _ => return (NOT_FOUND.to_string(), "Invalid resource type".to_string()),
+        _ =>{
+            println!("Match not found############");
+            return (NOT_FOUND.to_string(), "Invalid resource type".to_string());
+        },
     };
 
     // Perform the delete operation
