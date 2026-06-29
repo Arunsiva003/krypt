@@ -739,7 +739,8 @@ module.exports = async (req, res) => {
   }
 
   try {
-    const pathParts = Array.isArray(req.query.path) ? req.query.path : [req.query.path].filter(Boolean);
+    const rawPath = req.query.path ?? req.query['...path'];
+    const pathParts = Array.isArray(rawPath) ? rawPath : [rawPath].filter(Boolean);
     const path = `/${pathParts.join('/')}`;
     if (req.method === 'GET' && path === '/health') {
       try {
