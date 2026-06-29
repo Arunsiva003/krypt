@@ -742,7 +742,19 @@ module.exports = async (req, res) => {
     const pathParts = Array.isArray(req.query.path) ? req.query.path : [req.query.path].filter(Boolean);
     const path = `/${pathParts.join('/')}`;
     if (req.method === 'GET' && path === '/health') {
-      await handleHealth(res);
+      try {
+        await handleHealth(res);
+      } catch (error) {
+        console.error('Health check error', {
+          code: error.code || error.name || 'unknown_error',
+          message: String(error.message || 'Health check failed').slice(0, 160),
+        });
+        json(res, 500, {
+          status: 'degraded',
+          database: 'failed',
+          database_error_code: error.code || error.name || 'unknown',
+        });
+      }
       return;
     }
 
