@@ -575,6 +575,37 @@ const handleUsers = async (req, path, body) => {
   return null;
 };
 
+const handleGoogleUser = async (req, path, body) => {
+  if (!(req.method === 'POST' && path === '/users/google')) return null;
+  checkRateLimit(req, 'auth');
+  const profile = await verifyGoogleCredential(requireText(body.credential, 'Google credential', 8192));
+  await ensureSchema();
+  const sql = getSql();
+  const existing = await sql`
+    SELECT * FROM users WHERE google_sub = ${profile.sub} OR LOWER(email) = LOWER(${profile.email}) LIMIT 1
+  `;
+  let user = existing[0];
+  if (user) {
+    const rows = await sql`
+      UPDATE users
+      SET google_sub = ${profile.sub}, auth_provider = CASE WHEN auth_provider = 'password' THEN auth_provider ELSE 'google' END
+      WHERE id = ${user.id}
+      RETURNING id, firstname, lastname, username, email
+    `;
+    user = rows[0];
+  } else {
+    const username = await uniqueGoogleUsername(profile.email);
+    const rows = await sql`
+      INSERT INTO users (firstname, lastname, username, email, password_hash, auth_provider, google_sub)
+      VALUES (${profile.given_name || profile.name || 'Google'}, ${profile.family_name || 'User'}, ${username}, ${profile.email.toLowerCase()}, NULL, 'google', ${profile.sub})
+      RETURNING id, firstname, lastname, username, email
+    `;
+    user = rows[0];
+  }
+  const token = signToken(user);
+  return { user: publicUser(user), token };
+};
+
 const handleEncryptions = async (req, path, body) => {
   if (req.method === 'GET' && path === '/encryptions/counts') {
     const sql = getSql();
@@ -694,7 +725,10 @@ const handleHealth = async (res) => {
   }
 
   const healthy = checks.database === 'reachable';
-  json(res, healthy ? 200 : 500, { status: healthy ? 'ok' : 'degraded' });
+  json(res, healthy ? 200 : 500, {
+    status: healthy ? 'ok' : 'degraded',
+    ...(healthy ? {} : { database: checks.database, database_error_code: checks.database_error_code || 'unknown' }),
+  });
 };
 
 module.exports = async (req, res) => {
@@ -711,8 +745,19 @@ module.exports = async (req, res) => {
       return;
     }
 
-    await ensureSchema();
     const body = ['POST', 'PUT'].includes(req.method) ? await readBody(req) : {};
+    const earlyResponse = await handleGoogleUser(req, path, body);
+    if (earlyResponse) {
+      if (earlyResponse?.token) {
+        res.setHeader('Set-Cookie', authCookie(earlyResponse.token, req));
+        json(res, 200, { user: earlyResponse.user });
+        return;
+      }
+      json(res, 200, earlyResponse);
+      return;
+    }
+
+    await ensureSchema();
     const response =
       (await handleFeedback(req, path, body)) ||
       (await handleUsers(req, path, body)) ||
