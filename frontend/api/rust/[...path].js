@@ -33,11 +33,7 @@ const databaseConnectionString = () => {
 };
 
 const json = (res, status, data) => {
-  if (typeof res.status === 'function') {
-    res.status(status);
-  } else {
-    res.statusCode = status;
-  }
+  res.statusCode = status;
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
   res.setHeader('Cache-Control', 'no-store');
   res.setHeader('X-Content-Type-Options', 'nosniff');
