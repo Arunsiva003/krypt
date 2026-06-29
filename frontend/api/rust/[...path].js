@@ -129,9 +129,10 @@ const getSql = () => {
   }
   if (!pgPool) {
     const ca = process.env.DATABASE_CA_CERT || process.env.PGSSLROOTCERT;
+    const rejectUnauthorized = ca ? process.env.KRYPT_DB_SSL_REJECT_UNAUTHORIZED !== 'false' : process.env.KRYPT_DB_SSL_REJECT_UNAUTHORIZED === 'true';
     const ssl = process.env.KRYPT_DB_SSL === 'false'
       ? false
-      : { rejectUnauthorized: process.env.KRYPT_DB_SSL_REJECT_UNAUTHORIZED !== 'false', ...(ca ? { ca } : {}) };
+      : { rejectUnauthorized, ...(ca ? { ca } : {}) };
     pgPool = new Pool({
       connectionString: databaseConnectionString(),
       ssl,
