@@ -1,0 +1,46 @@
+[build]
+  command = "GENERATE_SOURCEMAP=false npm run build"
+  publish = "build"
+  functions = "netlify/functions"
+
+[build.environment]
+  CI = "false"
+
+[functions]
+  node_bundler = "esbuild"
+  external_node_modules = ["pg", "resend"]
+
+[[redirects]]
+  from = "/static/js/*.map"
+  to = "/404"
+  status = 404
+  force = true
+
+[[redirects]]
+  from = "/static/css/*.map"
+  to = "/404"
+  status = 404
+  force = true
+
+[[redirects]]
+  from = "/.env"
+  to = "/404"
+  status = 404
+  force = true
+
+[[redirects]]
+  from = "/.env/*"
+  to = "/404"
+  status = 404
+  force = true
+
+[[redirects]]
+  from = "/.git/*"
+  to = "/404"
+  status = 404
+  force = true
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

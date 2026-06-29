@@ -1,1 +1,3 @@
-pub const POSTGRES_URL: &str = "postgresql://uu09n2xc646nt4vczmt7:bTb9GyWabKOZ5h499cnEeIZXMSzt8x@b3ix8fekyxlm55qvgxtk-postgresql.services.clever-cloud.com:50013/b3ix8fekyxlm55qvgxtk";
+pub fn postgres_url() -> Option<String> {
+    std::env::var("DATABASE_URL").ok()
+}

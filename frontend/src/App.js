@@ -1,80 +1,78 @@
-import React, { useContext } from 'react';
-import { BrowserRouter as Router, Route, Routes, useNavigate } from 'react-router-dom';
-import { createTheme, ThemeProvider } from '@mui/material/styles';
-import CssBaseline from '@mui/material/CssBaseline';
+import React, { useContext, useEffect } from 'react';
+import { BrowserRouter as Router, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import Login from './pages/Login/login'
 import SignUp from './pages/SignUp/SignUp';
+import Landing from './pages/Landing/Landing';
+import ToolGuide from './pages/ToolGuide/ToolGuide';
 import Home from './pages/Home/Home';
 import Navbar from './components/Navbar/Navbar';
 import Krypt from './pages/Krypt/Krypt';
 import UserContext from './UserContext';
 import ImageEncrypt from "./components/ImageEncrypt/ImageEncrypt";
 import ProfileComponent from './pages/Profile/Profile';
-import Dashboard from './components/Dashboard/Dashboard';
 import Encryptions from './components/Encryptions/Encryptions';
+import { ThemeModeProvider } from './components/ThemeModeProvider';
+import Suggestions from './pages/Suggestions/Suggestions';
 
+const ProtectedRoute = ({ children }) => {
+  const { isAuthenticated } = useContext(UserContext);
+  return isAuthenticated ? children : <Navigate to="/" replace />;
+};
 
-// const theme = createTheme({
-//   palette: {
-//     primary: {
-//       main: 'white', // Adjust the primary color as needed
-//     },
-//     background: {
-//       default: '#000000', // Set the background color to black
-//     },
-//     text: {
-//       primary: '#ffffff', // Set the text color to white
-//     },
-//   },
-// });
+const PublicOnlyRoute = ({ children }) => {
+  const { isAuthenticated } = useContext(UserContext);
+  return isAuthenticated ? <Navigate to="/home" replace /> : children;
+};
+
+const ScrollToTop = () => {
+  const { hash, pathname } = useLocation();
+
+  useEffect(() => {
+    if (hash) return;
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+  }, [hash, pathname]);
+
+  return null;
+};
 
 function App() {
-
-  const {user} = useContext(UserContext);
-  const isLogged = user;
-  console.log("User from app:",user);
-
-
   return (
-    // <ThemeProvider theme={theme}>
-      // <CssBaseline />
-      <Router>
-        <div className='App'>
-          <Navbar />
-          <div className='content'>
-
-
-            {user==null ? 
-              <Routes>
-                  <Route path='/' element={<Login/>}/>
-                  <Route path='/signup' element={<SignUp/>}/>
-                  <Route path='*' element={<NotFound/>} />
-              </Routes>
-              :
-              <Routes>
-                <Route path='/' element={<Home/>} />
-                <Route path='/home' element={<Home />} />
-                <Route path='/krypt/:name' element={<Krypt />} />
-                <Route path='/imagek' element={<ImageEncrypt />} />
-                <Route path='/profile' element={<ProfileComponent/>} />
-                <Route path='/encryptions' element={<Encryptions/>}/>
-                <Route path='/dashboard' element={<Encryptions/>}/>
-                <Route path='*' element={<NotFound />} />
-              </Routes>
-            }
-          </div>
-        </div>
+    <ThemeModeProvider>
+      <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <ScrollToTop />
+        <AppFrame />
       </Router>
-    // </ThemeProvider>
+    </ThemeModeProvider>
   );
 }
 
-// Example 404 (Not Found) component
-const NotFound = () => {
-  const navigate = useNavigate();
-  navigate('/');
+const AppFrame = () => {
+  const { isAuthenticated } = useContext(UserContext);
+  const location = useLocation();
+  const publicPaths = ['/', '/login', '/signup'];
+  const showWorkspaceNav = isAuthenticated && !publicPaths.includes(location.pathname);
+
+  return (
+    <div className='App'>
+      {showWorkspaceNav ? <Navbar /> : null}
+      <div className='content'>
+        <Routes>
+          <Route path='/' element={isAuthenticated ? <Navigate to="/home" replace /> : <Landing />} />
+          <Route path='/login' element={<PublicOnlyRoute><Login /></PublicOnlyRoute>} />
+          <Route path='/signup' element={<PublicOnlyRoute><SignUp /></PublicOnlyRoute>} />
+          <Route path='/tools' element={<ToolGuide />} />
+          <Route path='/home' element={<ProtectedRoute><Home /></ProtectedRoute>} />
+          <Route path='/krypt/:name' element={<ProtectedRoute><Krypt /></ProtectedRoute>} />
+          <Route path='/imagek' element={<ProtectedRoute><ImageEncrypt /></ProtectedRoute>} />
+          <Route path='/profile' element={<ProtectedRoute><ProfileComponent /></ProtectedRoute>} />
+          <Route path='/suggestions' element={<ProtectedRoute><Suggestions /></ProtectedRoute>} />
+          <Route path='/encryptions' element={<ProtectedRoute><Encryptions /></ProtectedRoute>} />
+          <Route path='/dashboard' element={<ProtectedRoute><Encryptions /></ProtectedRoute>} />
+          <Route path='*' element={<Navigate to={isAuthenticated ? '/home' : '/'} replace />} />
+        </Routes>
+      </div>
+    </div>
+  );
 };
 
 export default App;
-
-

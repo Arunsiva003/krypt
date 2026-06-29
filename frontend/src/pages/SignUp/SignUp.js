@@ -1,174 +1,102 @@
-import React , {useState} from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import axios from 'axios';
-import Avatar from '@mui/material/Avatar';
-import Button from '@mui/material/Button';
-import CssBaseline from '@mui/material/CssBaseline';
-import TextField from '@mui/material/TextField';
-import FormControlLabel from '@mui/material/FormControlLabel';
-import Checkbox from '@mui/material/Checkbox';
-import Grid from '@mui/material/Grid';
-import Box from '@mui/material/Box';
-import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
-import Typography from '@mui/material/Typography';
-import Container from '@mui/material/Container';
-import { createTheme, ThemeProvider } from '@mui/material/styles';
-
-function Copyright(props) {
-  return (
-    <Typography variant="body2" color="text.secondary" align="center" {...props}>
-      {'Copyright © '}
-      <Link color="inherit" href="https://mui.com/">
-        Website Name
-      </Link>{' '}
-      {new Date().getFullYear()}
-      {'.'}
-    </Typography>
-  );
-}
-
-// TODO remove, this demo shouldn't need to reset the theme.
-
-const defaultTheme = createTheme();
+import React, { useContext, useState } from 'react';
+import { Link as RouterLink, useNavigate } from 'react-router-dom';
+import { Alert, Box, Button, Checkbox, FormControlLabel, Grid, Link, Stack, TextField, Typography } from '@mui/material';
+import PersonAddAltOutlinedIcon from '@mui/icons-material/PersonAddAltOutlined';
+import api, { isMockerEnabled } from '../../api/client';
+import UserContext from '../../UserContext';
+import { useFeedback } from '../../components/Feedback/FeedbackProvider';
+import AuthLayout from '../../components/Layout/AuthLayout';
+import GoogleAuthButton from '../../components/GoogleAuthButton';
 
 export default function SignUp() {
-  const navigate =useNavigate();
-  const [wait,setWait] = useState(null);
-  
-  // React.useEffect(()=>{
-  //   axios.get("https://rustbackend.onrender.com/api/rust/users")
-  //   .then((res)=>console.log(res.data));
-  // },[])
+  const navigate = useNavigate();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const { setAuth } = useContext(UserContext);
+  const { notify } = useFeedback();
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault();
-    setWait(1);
+    setIsSubmitting(true);
     const data = new FormData(event.currentTarget);
     const firstName = data.get('firstName');
     const lastName = data.get('lastName');
     const email = data.get('email');
     const username = data.get('username');
     const password = data.get('password');
-    
-    console.log(wait);
-    axios.post("https://rustbackend.onrender.com/api/rust/users", {
-      firstname:firstName,
-      lastname:lastName,
-      username,
-      email,
-      password
-    })
-    .then((response) => {
-      setWait(0); // Set loading state back to 0 after the request is completed
-      navigate('/'); // Navigate to the home page after successful submission
-    })
-    .catch((err) => {
-      setWait(0); // Set loading state back to 0 if there's an error
-      alert("Invalid User..."); // Show an alert for invalid user
-    });
 
+    try {
+      const response = await api.post('/api/rust/users', {
+        firstname: firstName,
+        lastname: lastName,
+        username,
+        email,
+        password,
+      });
+      setAuth(response.data);
+      notify('Account created. Welcome to Krypt.', 'success');
+      navigate('/home', { replace: true });
+    } catch (err) {
+      notify(err.response?.data?.error || 'Unable to create account', 'error');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
-    <ThemeProvider theme={defaultTheme}>
-      <Container component="main" maxWidth="xs">
-        <CssBaseline />
-        <Box
-          sx={{
-            marginTop: 8,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-          }}
-        >
-          <Avatar sx={{ m: 1, bgcolor: 'secondary.main' }}>
-            <LockOutlinedIcon />
-          </Avatar>
-          <Typography component="h1" variant="h5">
-            Sign up
-          </Typography>
-          {/* <p>Since deployed on Render..the very first call may take upto few seconds...please wait!!</p> */}
-          <Box component="form" onSubmit={handleSubmit} noValidate sx={{ mt: 1 }}>
-            <Grid container spacing={2}>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  autoComplete="fname"
-                  name="firstName"
-                  required
-                  fullWidth
-                  id="firstName"
-                  label="First Name"
-                  autoFocus
-                />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  autoComplete="lname"
-                  name="lastName"
-                  required
-                  fullWidth
-                  id="lastName"
-                  label="Last Name"
-                />
-              </Grid>
-              <Grid item xs={12}>
-                <TextField
-                  autoComplete="username"
-                  name="username"
-                  required
-                  fullWidth
-                  id="username"
-                  label="Username"
-                />
-              </Grid>
-              <Grid item xs={12}>
-                <TextField
-                  autoComplete="email"
-                  name="email"
-                  required
-                  fullWidth
-                  id="email"
-                  label="Email Address"
-                />
-              </Grid>
-              <Grid item xs={12}>
-                <TextField
-                  autoComplete="new-password"
-                  name="password"
-                  required
-                  fullWidth
-                  type="password"
-                  id="password"
-                  label="Password"
-                />
-              </Grid>
-            </Grid>
-            <FormControlLabel
-              control={<Checkbox value="remember" color="primary" />}
-              label="Remember me"
-            />
-            <Button
-              type="submit"
+    <AuthLayout title="Create account" subtitle="Set up a private workspace for encrypted artifacts and tool history.">
+      <Stack component="form" onSubmit={handleSubmit} spacing={2.2} noValidate>
+        {isMockerEnabled() ? (
+          <Alert severity="info">
+            Mock mode is active. Signup creates a browser-local account only.
+          </Alert>
+        ) : null}
+        <Grid container spacing={1.5}>
+          <Grid item xs={12} sm={6}>
+            <TextField autoComplete="given-name" name="firstName" required fullWidth id="firstName" label="First name" autoFocus />
+          </Grid>
+          <Grid item xs={12} sm={6}>
+            <TextField autoComplete="family-name" name="lastName" required fullWidth id="lastName" label="Last name" />
+          </Grid>
+          <Grid item xs={12}>
+            <TextField autoComplete="username" name="username" required fullWidth id="username" label="Username" />
+          </Grid>
+          <Grid item xs={12}>
+            <TextField autoComplete="email" name="email" required fullWidth id="email" label="Email address" />
+          </Grid>
+          <Grid item xs={12}>
+            <TextField
+              autoComplete="new-password"
+              name="password"
+              required
               fullWidth
-              variant="contained"
-              sx={{ mt: 3, mb: 2 }}
-            >
-              Sign Up
-            </Button>
-            {wait === 1 ? <p>"Please wait a moment as the very first call may take a few seconds due to deployment on Render."</p>:null}
-            <Grid container justifyContent="flex-end">
-              <Grid item>
-                <Link to="/"  variant="body2">
-                  Already have an account? Sign in
-                </Link>
-              </Grid>
-            </Grid>
-          </Box>
+              type="password"
+              id="password"
+              label="Password"
+              helperText="Use at least 8 characters."
+            />
+          </Grid>
+        </Grid>
+        <FormControlLabel control={<Checkbox value="remember" color="primary" />} label="Keep me signed in" />
+        <Button
+          type="submit"
+          fullWidth
+          size="large"
+          variant="contained"
+          startIcon={<PersonAddAltOutlinedIcon />}
+          disabled={isSubmitting}
+        >
+          {isSubmitting ? 'Creating workspace...' : 'Create workspace'}
+        </Button>
+        <GoogleAuthButton label="Sign up with Google" />
+        <Box sx={{ textAlign: 'center' }}>
+          <Typography variant="body2" color="text.secondary">
+            Already have an account?{' '}
+            <Link component={RouterLink} to="/login" underline="hover" fontWeight={750}>
+              Sign in
+            </Link>
+          </Typography>
         </Box>
-        <Copyright sx={{ mt: 8, mb: 4 }} />
-      </Container>
-    </ThemeProvider>
+      </Stack>
+    </AuthLayout>
   );
 }
-
-

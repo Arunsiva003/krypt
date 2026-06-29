@@ -1,84 +1,85 @@
-import React, { useState, useEffect, useContext } from 'react';
-import { Typography, Grid, Card, CardContent, Button, Container, CircularProgress, IconButton } from '@mui/material';
-import UserContext from '../../UserContext';
-import axios from 'axios';
+import React, { useEffect, useState } from 'react';
+import { Alert, Button, Card, CardContent, CircularProgress, Grid, IconButton, Stack, Typography } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
+import DownloadIcon from '@mui/icons-material/Download';
+import api from '../../api/client';
+import { useFeedback } from '../Feedback/FeedbackProvider';
 
-const SteganographyEncryptions = () => {
-  const [encryptions, setEncryptions] = useState([]); 
-  const {user} = useContext(UserContext);
-  const [isLoading,setIsLoading] = useState(true);
+const SteganographyEncryptions = ({ onCountChange }) => {
+  const [encryptions, setEncryptions] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const { notify } = useFeedback();
 
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const response = await axios.get(`https://rustbackend.onrender.com/api/rust/textimage/${user.id}`);
+    api.get('/api/rust/textimage')
+      .then((response) => {
         setEncryptions(response.data);
-        setIsLoading(false);
-      } catch (error) {
-        console.error('Error fetching encryption data:', error);
-      }
-    };
-    fetchData();
-  }, [user.id]);
+        onCountChange?.(response.data.length);
+      })
+      .catch((error) => notify(error.response?.data?.error || 'Unable to fetch steganography history.', 'error'))
+      .finally(() => setIsLoading(false));
+  }, [notify, onCountChange]);
 
   const handleDownload = async (encryptedImageLink) => {
     try {
       const response = await fetch(encryptedImageLink);
       const blob = await response.blob();
-  
       const link = document.createElement('a');
       link.href = URL.createObjectURL(blob);
-      link.download = 'encrypted_image.png';
+      link.download = 'encoded_image.png';
       link.click();
-    } catch (error) {
-      console.error('Error downloading image:', error);
-      alert('An error occurred while downloading the image. Please try again.');
+    } catch {
+      notify('Unable to download this image.', 'error');
     }
   };
 
   const handleDelete = async (id) => {
+    if (!window.confirm('Delete this saved steganography record?')) return;
     try {
-      const response = await axios.delete(`https://rustbackend.onrender.com/api/rust/textimage/${id}`);
-      setEncryptions(encryptions.filter(encryption => encryption.id !== id));
-      alert('Encryption deleted successfully.');
+      await api.delete(`/api/rust/textimage/${id}`);
+      setEncryptions((items) => {
+        const nextItems = items.filter((encryption) => encryption.id !== id);
+        onCountChange?.(nextItems.length);
+        return nextItems;
+      });
+      notify('Steganography record deleted.', 'success');
     } catch (error) {
-      console.error('Error deleting encryption:', error);
-      alert('An error occurred while deleting the encryption. Please try again.');
+      notify(error.response?.data?.error || 'Unable to delete steganography record.', 'error');
     }
   };
-  
+
+  if (isLoading) {
+    return <Stack alignItems="center" sx={{ py: 5 }}><CircularProgress size={30} /></Stack>;
+  }
+
+  if (encryptions.length === 0) {
+    return <Alert severity="info">No saved steganography images yet.</Alert>;
+  }
+
   return (
-    <Container maxWidth="lg" style={{ padding: '20px' }}>
-      <Typography variant="h4" align="center" gutterBottom>
-        Steganography Encryptions
-      </Typography>
-      {isLoading ? (
-        <div style={{ display: 'flex', justifyContent: 'center' }}>
-          <CircularProgress size={30} />
-        </div>
-      ) : (
-        <Grid container spacing={2}>
-          {encryptions.length !== 0 ? (
-            encryptions.map((encryption) => (
-              <Grid item xs={12} sm={6} md={4} key={encryption.id}>
-                <Card>
-                  <CardContent>
-                    <Typography variant="h6">Image</Typography>
-                    <img src={encryption.encrypted_image_link} alt="Encrypted Image" style={{ width: '100%' }} />
-                    <Typography variant="body1">Key Used: {encryption.key_used}</Typography>
-                    <Button variant="contained" onClick={() => handleDownload(encryption.encrypted_image_link)}>Download</Button>
-                    <IconButton onClick={() => handleDelete(encryption.id)}><DeleteIcon /></IconButton>
-                  </CardContent>
-                </Card>
-              </Grid>
-            ))
-          ) : (
-            <Typography variant="body1" align="center">No Data</Typography>
-          )}
+    <Grid container spacing={2}>
+      {encryptions.map((encryption) => (
+        <Grid item xs={12} sm={6} md={4} key={encryption.id}>
+          <Card sx={{ height: '100%' }}>
+            <CardContent>
+              <Stack spacing={2}>
+                <Typography variant="h6">Encoded Image</Typography>
+                <img src={encryption.encrypted_image_link} alt="Encoded steganography result" style={{ width: '100%', maxHeight: 220, objectFit: 'cover' }} />
+                <Alert severity="info">Passkey not stored</Alert>
+                <Stack direction="row" spacing={1}>
+                  <Button startIcon={<DownloadIcon />} onClick={() => handleDownload(encryption.encrypted_image_link)}>
+                    Download
+                  </Button>
+                  <IconButton aria-label="Delete steganography record" onClick={() => handleDelete(encryption.id)}>
+                    <DeleteIcon />
+                  </IconButton>
+                </Stack>
+              </Stack>
+            </CardContent>
+          </Card>
         </Grid>
-      )}
-    </Container>
+      ))}
+    </Grid>
   );
 };
 

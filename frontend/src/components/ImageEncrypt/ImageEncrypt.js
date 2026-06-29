@@ -1,170 +1,184 @@
-import React, { useContext, useState } from 'react';
-import { Tab, Tabs, TextField, Button, Typography, Container, Grid, CircularProgress } from '@mui/material';
-import UserContext from '../../UserContext';
-import axios from 'axios';
+import React, { useState } from 'react';
+import { Alert, Box, Button, Grid, Stack, Tab, Tabs, TextField, CircularProgress } from '@mui/material';
+import DownloadIcon from '@mui/icons-material/Download';
+import SaveIcon from '@mui/icons-material/Save';
+import api from '../../api/client';
+import { decryptTextPackage, encryptTextPackage } from '../../cryptoUtils';
+import { useFeedback } from '../Feedback/FeedbackProvider';
+import PageShell from '../Layout/PageShell';
+import SectionHeader from '../Layout/SectionHeader';
+import SurfacePanel from '../Layout/SurfacePanel';
 
 const XOREncryption = () => {
   const [image, setImage] = useState(null);
   const [processedImage, setProcessedImage] = useState(null);
+  const [encryptedPackage, setEncryptedPackage] = useState('');
   const [key, setKey] = useState('');
   const [isEncrypted, setIsEncrypted] = useState(false);
   const [selectedTab, setSelectedTab] = useState(0);
   const [processing, setProcessing] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
-  const [cloudUploadLink, setCloudUploadLink] = useState('');
-  const {user} = useContext(UserContext);
+  const { notify } = useFeedback();
 
-  const handleImageChange = (e) => {
-    const file = e.target.files[0];
+  const handleImageChange = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
     const reader = new FileReader();
-
     reader.onload = (upload) => {
-      setImage(upload.target.result);
+      if (selectedTab === 0) {
+        setImage(upload.target.result);
+      } else {
+        setEncryptedPackage(String(upload.target.result || ''));
+        setImage(null);
+      }
       setProcessedImage(null);
       setIsEncrypted(false);
+      setErrorMessage('');
     };
-
-    reader.readAsDataURL(file);
-  };
-
-  const handleKeyChange = (e) => {
-    setKey(e.target.value);
+    if (selectedTab === 0) reader.readAsDataURL(file);
+    else reader.readAsText(file);
   };
 
   const processImage = async (encrypt) => {
-    if (image && key) {
-      setProcessing(true);
-      setErrorMessage('');
+    if ((!encrypt && !encryptedPackage.trim()) || (encrypt && !image) || !key.trim()) {
+      notify(encrypt ? 'Choose an image and enter a key first.' : 'Choose an encrypted package and enter the key first.', 'warning');
+      return;
+    }
 
-      try {
-        // Simulate processing delay
-        await new Promise((resolve) => setTimeout(resolve, 2000));
+    setProcessing(true);
+    setErrorMessage('');
 
-        // Convert base64 image to Uint8Array
-        const imgData = atob(image.split(',')[1]);
-        const dataArray = new Uint8Array(imgData.length);
-        for (let i = 0; i < imgData.length; i++) {
-          dataArray[i] = imgData.charCodeAt(i);
-        }
-
-        // Convert key to Uint8Array
-        const keyData = key.split('').map((char) => char.charCodeAt(0));
-        const processedArray = new Uint8Array(dataArray.length);
-
-        // XOR encryption or decryption
-        for (let i = 0; i < dataArray.length; i++) {
-          processedArray[i] = dataArray[i] ^ keyData[i % keyData.length];
-        }
-
-        // Convert back to base64 and set as processed image
-        const processedBase64 = btoa(String.fromCharCode.apply(null, processedArray));
-        setProcessedImage(`data:image/png;base64,${processedBase64}`);
-        setIsEncrypted(encrypt);
-      } catch (error) {
-        setErrorMessage('Please upload an image with size less than 800X600');
-      } finally {
-        setProcessing(false);
+    try {
+      if (encrypt) {
+        const pkg = await encryptTextPackage(image, key, { tool: 'image-encryption', payload: 'image-data-url' });
+        setEncryptedPackage(JSON.stringify(pkg, null, 2));
+        setProcessedImage(null);
+        setIsEncrypted(true);
+        notify('Image encrypted with AES-GCM.', 'success');
+      } else {
+        const dataUrl = await decryptTextPackage(JSON.parse(encryptedPackage), key);
+        if (!dataUrl.startsWith('data:image/')) throw new Error('Invalid image package');
+        setProcessedImage(dataUrl);
+        setIsEncrypted(false);
+        notify('Image decrypted.', 'success');
       }
+    } catch {
+      setErrorMessage(encrypt ? 'Unable to encrypt this image. Try a smaller PNG or JPG.' : 'Unable to decrypt this image package with the provided key.');
+    } finally {
+      setProcessing(false);
     }
   };
 
   const downloadImage = () => {
-    if (processedImage) {
-      const link = document.createElement('a');
+    if (!processedImage && !encryptedPackage) return;
+    const link = document.createElement('a');
+    if (isEncrypted) {
+      link.href = URL.createObjectURL(new Blob([encryptedPackage], { type: 'application/json' }));
+      link.download = 'encrypted_image.krypt.json';
+    } else {
       link.href = processedImage;
-      link.download = isEncrypted ? 'encrypted_image.png' : 'decrypted_image.png';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      link.download = 'decrypted_image.png';
     }
+    link.click();
+    if (isEncrypted) URL.revokeObjectURL(link.href);
   };
 
   const handleTabChange = (event, newValue) => {
     setKey('');
     setImage(null);
     setProcessedImage(null);
+    setEncryptedPackage('');
     setSelectedTab(newValue);
   };
 
-
   const handleCloudSave = async () => {
-    try{
-      const response =  axios.post('https://rustbackend.onrender.com/api/rust/image',{
-        user_id:user.id,
-        username:user.username,
-        encrypted_image_link:processedImage,
-        key_used:key
-      });
-      console.log(response);
-      alert("Data saved");
-    }catch(err){
-      console.log(err);
+    if (!encryptedPackage || !isEncrypted) {
+      notify('Encrypt an image before saving it.', 'warning');
+      return;
+    }
+    try {
+      setSaving(true);
+      await api.post('/api/rust/image', { encrypted_image_link: encryptedPackage });
+      notify('Encrypted image saved. The key was not stored.', 'success');
+    } catch (err) {
+      notify(err.response?.data?.error || 'Unable to save encrypted image.', 'error');
+    } finally {
+      setSaving(false);
     }
   };
 
   return (
-    <Container maxWidth="md">
-      <Typography variant="h4" align="center" gutterBottom>XOR Encryption</Typography>
-      <Tabs value={selectedTab} onChange={handleTabChange} centered>
-        <Tab label="Encrypt" />
-        <Tab label="Decrypt" />
-      </Tabs>
-      <div>
-        {selectedTab === 0 && (
-          <Grid container spacing={2}>
-            <Grid item xs={12}>
-              <input type="file" accept="image/*" onChange={handleImageChange} />
+    <PageShell>
+      <Stack spacing={3}>
+        <SectionHeader
+          eyebrow="File workflow"
+          title="Image Encryption"
+          description="Encrypt image files locally into AES-GCM packages, or decrypt packages back into image previews."
+        />
+        <Alert severity="info" sx={{ borderRadius: 2 }}>
+          Krypt stores only encrypted image packages. Your key never leaves the browser.
+        </Alert>
+        <SurfacePanel>
+          <Stack spacing={3}>
+            <Tabs value={selectedTab} onChange={handleTabChange}>
+              <Tab label="Encrypt" />
+              <Tab label="Decrypt" />
+            </Tabs>
+            <Grid container spacing={3} sx={{ width: '100%', m: 0 }}>
+              <Grid item xs={12} md={6}>
+                <Stack spacing={2}>
+                  <Button variant="outlined" component="label">
+                    {selectedTab === 0 ? 'Choose image' : 'Choose .krypt package'}
+                    <input type="file" accept={selectedTab === 0 ? 'image/*' : 'application/json,.json,.krypt'} hidden onChange={handleImageChange} />
+                  </Button>
+                  <TextField
+                    label={selectedTab === 0 ? 'Encryption key' : 'Decryption key'}
+                    fullWidth
+                    value={key}
+                    onChange={(event) => setKey(event.target.value)}
+                  />
+                  <Button variant="contained" onClick={() => processImage(selectedTab === 0)} disabled={processing}>
+                    {processing ? <CircularProgress size={22} /> : selectedTab === 0 ? 'Encrypt Image' : 'Decrypt Image'}
+                  </Button>
+                </Stack>
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <Stack spacing={2}>
+                  {image || processedImage ? (
+                    <Box component="img" src={processedImage || image} alt="Selected result preview" sx={{ width: '100%', maxHeight: 340, objectFit: 'contain', bgcolor: 'action.hover', borderRadius: 2, border: '1px solid', borderColor: 'divider' }} />
+                  ) : (
+                    <Box sx={{ minHeight: 300, display: 'grid', placeItems: 'center', bgcolor: 'action.hover', color: 'text.secondary', borderRadius: 2, border: '1px dashed', borderColor: 'divider' }}>
+                      Select an image to preview it here.
+                    </Box>
+                  )}
+                  {errorMessage ? <Alert severity="error">{errorMessage}</Alert> : null}
+                  {encryptedPackage ? (
+                    <TextField
+                      label="Encrypted package"
+                      multiline
+                      minRows={5}
+                      fullWidth
+                      value={encryptedPackage}
+                      InputProps={{ readOnly: true }}
+                    />
+                  ) : null}
+                  <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
+                    <Button startIcon={<DownloadIcon />} onClick={downloadImage} disabled={!processedImage && !encryptedPackage}>
+                      Download
+                    </Button>
+                    <Button startIcon={<SaveIcon />} onClick={handleCloudSave} disabled={saving || !encryptedPackage || !isEncrypted}>
+                      {saving ? 'Saving...' : 'Save'}
+                    </Button>
+                  </Stack>
+                </Stack>
+              </Grid>
             </Grid>
-            <Grid item xs={12}>
-              <TextField
-                label="Encryption Key"
-                variant="outlined"
-                fullWidth
-                value={key}
-                onChange={handleKeyChange}
-              />
-            </Grid>
-            <Grid item xs={12}>
-              <Button variant="contained" onClick={() => processImage(true)} disabled={processing}>
-                {processing ? <CircularProgress size={24} /> : 'Encrypt Image'}
-              </Button>
-            </Grid>
-          </Grid>
-        )}
-        {selectedTab === 1 && (
-          <Grid container spacing={2}>
-            <Grid item xs={12}>
-              <input type="file" accept="image/*" onChange={handleImageChange} />
-            </Grid>
-            <Grid item xs={12}>
-              <TextField
-                label="Decryption Key"
-                variant="outlined"
-                fullWidth
-                value={key}
-                onChange={handleKeyChange}
-              />
-            </Grid>
-            <Grid item xs={12}>
-              <Button variant="contained" onClick={() => processImage(false)} disabled={processing}>
-                {processing ? <CircularProgress size={24} /> : 'Decrypt Image'}
-              </Button>
-            </Grid>
-          </Grid>
-        )}
-        {errorMessage && <Typography color="error">{errorMessage}</Typography>}
-        {processedImage && !errorMessage && (
-          <div>
-            {/* <img src={processedImage} alt={isEncrypted ? 'Encrypted' : 'Decrypted'} /> */}
-            <br></br>
-            <Button variant="contained" onClick={downloadImage}>
-              Download {isEncrypted ? 'Encrypted' : 'Decrypted'} Image
-            </Button>
-          </div>
-        )}
-      </div>
-      <Button onClick={handleCloudSave}>Cloud Save</Button>
-    </Container>
+          </Stack>
+        </SurfacePanel>
+      </Stack>
+    </PageShell>
   );
 };
 

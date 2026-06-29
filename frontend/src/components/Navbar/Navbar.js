@@ -1,191 +1,205 @@
 import React, { useContext, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import AppBar from '@mui/material/AppBar';
-import Box from '@mui/material/Box';
-import Toolbar from '@mui/material/Toolbar';
-import IconButton from '@mui/material/IconButton';
-import Typography from '@mui/material/Typography';
-import Menu from '@mui/material/Menu';
+import { useLocation, useNavigate } from 'react-router-dom';
+import {
+  AppBar,
+  Avatar,
+  Box,
+  Button,
+  Container,
+  Divider,
+  IconButton,
+  Menu,
+  MenuItem,
+  Stack,
+  Toolbar,
+  Tooltip,
+  Typography,
+} from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
-import Container from '@mui/material/Container';
-import Avatar from '@mui/material/Avatar';
-import Button from '@mui/material/Button';
-import Tooltip from '@mui/material/Tooltip';
-import MenuItem from '@mui/material/MenuItem';
-import AdbIcon from '@mui/icons-material/Adb';
+import HomeOutlinedIcon from '@mui/icons-material/HomeOutlined';
+import DashboardOutlinedIcon from '@mui/icons-material/DashboardOutlined';
+import BuildOutlinedIcon from '@mui/icons-material/BuildOutlined';
+import LogoutOutlinedIcon from '@mui/icons-material/LogoutOutlined';
+import PersonOutlineOutlinedIcon from '@mui/icons-material/PersonOutlineOutlined';
+import FeedbackOutlinedIcon from '@mui/icons-material/FeedbackOutlined';
 import UserContext from '../../UserContext';
+import { isOwnerUser } from '../../adminAccess';
+import BrandMark from '../BrandMark';
+import ThemeToggle from '../ThemeToggle';
 
-const pages = ['Home', 'Tools', 'Encryptions'];
-const navLinks = ['/', '#','/encryptions'];
-const settings = ['Profile', 'Account', 'Dashboard', 'Logout'];
+const pages = [
+  { label: 'Home', path: '/home', icon: <HomeOutlinedIcon fontSize="small" /> },
+  { label: 'Tools', path: '/home#tools', icon: <BuildOutlinedIcon fontSize="small" /> },
+  { label: 'Guide', path: '/tools', icon: <BuildOutlinedIcon fontSize="small" /> },
+  { label: 'Dashboard', path: '/dashboard', icon: <DashboardOutlinedIcon fontSize="small" /> },
+];
 
 function Navbar() {
   const [anchorElNav, setAnchorElNav] = useState(null);
   const [anchorElUser, setAnchorElUser] = useState(null);
-  const {user,setUser} = useContext(UserContext);
+  const { user, logout } = useContext(UserContext);
   const navigate = useNavigate();
-  const handleOpenNavMenu = (event) => {
-    setAnchorElNav(event.currentTarget);
-  };
+  const location = useLocation();
+  const navPages = isOwnerUser(user)
+    ? [...pages, { label: 'Suggestions', path: '/suggestions', icon: <FeedbackOutlinedIcon fontSize="small" /> }]
+    : pages;
 
-  const handleOpenUserMenu = (event) => {
-    setAnchorElUser(event.currentTarget);
-  };
-
-  const handleCloseNavMenu = () => {
-    navigate('/');
+  const goTo = (path) => {
     setAnchorElNav(null);
+    if (path.includes('#')) {
+      navigate(path.split('#')[0]);
+      setTimeout(() => {
+        document.getElementById(path.split('#')[1])?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 80);
+      return;
+    }
+    navigate(path);
   };
 
-  const handleCloseUserMenu = (ind) => {
+  const handleUserAction = (action) => {
     setAnchorElUser(null);
-    if(ind==3){
-      console.log(user);
-      setUser(null);
-    navigate('/');
-
-      console.log(user);
-    } 
+    if (action === 'logout') {
+      logout();
+      navigate('/');
+      return;
+    }
+    navigate(action);
   };
 
-  const handleNav = (ind) =>{
-    console.log("ind:",ind);
-    if(ind=='Profile'){
-      navigate('/profile');
-    }
-    else if(ind=='Account'){
-      navigate('account');
-    }
-    else if(ind=='Dashboard'){
-      navigate('dashboard');
-    }
-  }
+  const initials = user?.username?.slice(0, 1)?.toUpperCase() || 'K';
 
   return (
-    <AppBar position="static">
+    <AppBar
+      position="sticky"
+      elevation={0}
+      sx={{
+        top: 0,
+        bgcolor: (theme) => theme.palette.mode === 'dark' ? 'rgba(6, 11, 18, 0.9)' : 'rgba(249, 251, 255, 0.9)',
+        backdropFilter: 'blur(18px)',
+        color: 'text.primary',
+        borderBottom: '1px solid',
+        borderColor: 'divider',
+      }}
+    >
       <Container maxWidth="xl">
-        <Toolbar disableGutters>
-          <AdbIcon sx={{ display: { xs: 'none', md: 'flex' }, mr: 1 }} />
-          <Typography
-            variant="h6"
-            noWrap
-            component="a"
-            href="/home"
-            sx={{
-              mr: 2,
-              display: { xs: 'none', md: 'flex' },
-              fontFamily: 'monospace',
-              fontWeight: 700,
-              letterSpacing: '.3rem',
-              color: 'black',
-              textDecoration: 'none',
-            }}
+        <Toolbar disableGutters sx={{ minHeight: { xs: 64, md: 72 } }}>
+          <Stack
+            direction="row"
+            alignItems="center"
+            spacing={1.2}
+            onClick={() => navigate('/home')}
+            sx={{ cursor: 'pointer', mr: { xs: 1, md: 4 } }}
           >
-            KRYPT
-          </Typography>
+            <BrandMark />
+            <Box sx={{ display: { xs: 'none', sm: 'block' } }}>
+              <Typography variant="h6" sx={{ lineHeight: 1 }}>
+                Krypt
+              </Typography>
+              <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700 }}>
+                Secure workspace
+              </Typography>
+            </Box>
+          </Stack>
 
           <Box sx={{ flexGrow: 1, display: { xs: 'flex', md: 'none' } }}>
-            <IconButton
-              size="large"
-              aria-label="account of current user"
-              aria-controls="menu-appbar"
-              aria-haspopup="true"
-              onClick={handleOpenNavMenu}
-              color="inherit"
-            >
+            <IconButton aria-label="Open navigation" onClick={(event) => setAnchorElNav(event.currentTarget)}>
               <MenuIcon />
             </IconButton>
-            <Menu
-              id="menu-appbar"
-              anchorEl={anchorElNav}
-              anchorOrigin={{
-                vertical: 'bottom',
-                horizontal: 'left',
-              }}
-              keepMounted
-              transformOrigin={{
-                vertical: 'top',
-                horizontal: 'left',
-              }}
-              open={Boolean(anchorElNav)}
-              onClose={handleCloseNavMenu}
-              sx={{
-                display: { xs: 'block', md: 'none' },
-              }}
-            >
-              {pages.map((page,ind) => (
-                <MenuItem key={page} onClick={handleCloseNavMenu}>
-                <Typography textAlign="center">
-                  <Link to={`${navLinks[ind]}`}>
-                      {page}
-                      </Link>
-                      </Typography>
+            <Menu anchorEl={anchorElNav} open={Boolean(anchorElNav)} onClose={() => setAnchorElNav(null)}>
+              {navPages.map((page) => (
+                <MenuItem key={page.label} onClick={() => goTo(page.path)}>
+                  <Stack direction="row" spacing={1.2} alignItems="center">
+                    {page.icon}
+                    <Typography>{page.label}</Typography>
+                  </Stack>
                 </MenuItem>
               ))}
             </Menu>
           </Box>
 
-          <AdbIcon sx={{ display: { xs: 'flex', md: 'none' }, mr: 1 }} />
-          <Typography
-            variant="h5"
-            noWrap
-            component="a"
-            href="/home"
-            sx={{
-              mr: 2,
-              display: { xs: 'flex', md: 'none' },
-              flexGrow: 1,
-              fontFamily: 'monospace',
-              fontWeight: 700,
-              letterSpacing: '.3rem',
-              color: 'black',
-              textDecoration: 'none',
-            }}
-          >
-            KRYPT
-          </Typography>
+          <Stack direction="row" spacing={0.5} sx={{ flexGrow: 1, display: { xs: 'none', md: 'flex' } }}>
+            {navPages.map((page) => {
+              const active = page.path !== '/home#tools' && location.pathname === page.path;
+              return (
+                <Button
+                  key={page.label}
+                  startIcon={page.icon}
+                  onClick={() => goTo(page.path)}
+                  variant={active ? 'contained' : 'text'}
+                  color={active ? 'primary' : 'inherit'}
+                  sx={{
+                    px: 1.75,
+                    color: active ? 'primary.contrastText' : 'text.secondary',
+                    '&:hover': { bgcolor: active ? 'primary.dark' : 'action.hover' },
+                  }}
+                >
+                  {page.label}
+                </Button>
+              );
+            })}
+          </Stack>
 
-          <Box sx={{ flexGrow: 1, display: { xs: 'none', md: 'flex' } }}>
-            {pages.map((page, ind) => (
-              <Button
-                key={page}
-                onClick={()=>{navigate(`${navLinks[ind]}`)}}/*-----------------------*/
-                sx={{ my: 2, color: 'white', display: 'block' }}
-              >
-                {page}
-              </Button>
-            ))}
-          </Box>
-
-          <Box sx={{ flexGrow: 0 }}>
-            <Tooltip title="Open settings">
-              <IconButton onClick={handleOpenUserMenu} sx={{ p: 0 }}>
-                <Avatar alt={user&&user.username?.toUpperCase()} src="/static/images/avatar/12.jpg" />
+          <Stack direction="row" spacing={1.5} alignItems="center">
+            <ThemeToggle />
+            <Box sx={{ display: { xs: 'none', md: 'block' }, textAlign: 'right' }}>
+              <Typography variant="body2" sx={{ fontWeight: 750 }}>
+                {user?.username || 'User'}
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                Authenticated session
+              </Typography>
+            </Box>
+            <Tooltip title="Account menu">
+              <IconButton onClick={(event) => setAnchorElUser(event.currentTarget)} sx={{ p: 0 }}>
+                <Avatar
+                  sx={{
+                    width: 40,
+                    height: 40,
+                    bgcolor: 'secondary.main',
+                    color: 'secondary.contrastText',
+                    fontWeight: 800,
+                  }}
+                >
+                  {initials}
+                </Avatar>
               </IconButton>
             </Tooltip>
             <Menu
-              sx={{ mt: '45px' }}
-              id="menu-appbar"
               anchorEl={anchorElUser}
-              anchorOrigin={{
-                vertical: 'top',
-                horizontal: 'right',
-              }}
-              keepMounted
-              transformOrigin={{
-                vertical: 'top',
-                horizontal: 'right',
-              }}
               open={Boolean(anchorElUser)}
-              onClose={handleCloseUserMenu}
+              onClose={() => setAnchorElUser(null)}
+              anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+              transformOrigin={{ vertical: 'top', horizontal: 'right' }}
             >
-              {settings.map((setting,ind) => (
-                <MenuItem key={ind} onClick={()=>handleCloseUserMenu(ind)}>
-                  <Typography textAlign="center" onClick={()=>navigate(`/${setting.toLowerCase()}`)}>{setting}</Typography>
+              <MenuItem onClick={() => handleUserAction('/profile')}>
+                <Stack direction="row" spacing={1.2} alignItems="center">
+                  <PersonOutlineOutlinedIcon fontSize="small" />
+                  <Typography>Profile</Typography>
+                </Stack>
+              </MenuItem>
+              <MenuItem onClick={() => handleUserAction('/dashboard')}>
+                <Stack direction="row" spacing={1.2} alignItems="center">
+                  <DashboardOutlinedIcon fontSize="small" />
+                  <Typography>Dashboard</Typography>
+                </Stack>
+              </MenuItem>
+              {isOwnerUser(user) ? (
+                <MenuItem onClick={() => handleUserAction('/suggestions')}>
+                  <Stack direction="row" spacing={1.2} alignItems="center">
+                    <FeedbackOutlinedIcon fontSize="small" />
+                    <Typography>Suggestions</Typography>
+                  </Stack>
                 </MenuItem>
-              ))}
+              ) : null}
+              <Divider />
+              <MenuItem onClick={() => handleUserAction('logout')}>
+                <Stack direction="row" spacing={1.2} alignItems="center" color="error.main">
+                  <LogoutOutlinedIcon fontSize="small" />
+                  <Typography>Logout</Typography>
+                </Stack>
+              </MenuItem>
             </Menu>
-          </Box>
+          </Stack>
         </Toolbar>
       </Container>
     </AppBar>

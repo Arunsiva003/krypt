@@ -1,329 +1,241 @@
-import React, { useState, useContext } from 'react';
-import { BsCloudUpload } from 'react-icons/bs';
-import axios from 'axios';
-import UserContext from '../../UserContext';
-
-
-import './Steganography.css';
+import React, { useState } from 'react';
+import { Alert, Box, Button, Grid, Stack, Tab, Tabs, TextField, CircularProgress } from '@mui/material';
+import CloudUploadIcon from '@mui/icons-material/CloudUpload';
+import DownloadIcon from '@mui/icons-material/Download';
+import SaveIcon from '@mui/icons-material/Save';
+import api, { isMockerEnabled } from '../../api/client';
+import { useFeedback } from '../Feedback/FeedbackProvider';
+import PageShell from '../Layout/PageShell';
+import SectionHeader from '../Layout/SectionHeader';
+import SurfacePanel from '../Layout/SurfacePanel';
 
 const Steganography = () => {
   const [message, setMessage] = useState('');
   const [imageSrc, setImageSrc] = useState('');
   const [decodedMessage, setDecodedMessage] = useState('');
-  const [encodedImageSrc, setEncodedImageSrc] = useState("");
+  const [encodedImageSrc, setEncodedImageSrc] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [operation, setOperation] = useState("encrypt");
-  const [showDownloadButton, setShowDownloadButton] = useState(false);
+  const [operation, setOperation] = useState('encrypt');
   const [passkey, setPasskey] = useState('');
-  const [cloudUploadLink,setCloudUploadLink] = useState('');
-  const {user} = useContext(UserContext);
+  const [saving, setSaving] = useState(false);
+  const { notify } = useFeedback();
 
+  const handleImageChange = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setImageSrc(URL.createObjectURL(file));
+    setEncodedImageSrc('');
+    setDecodedMessage('');
+  };
 
   const encodeMessage = async () => {
-    try {
-      setIsLoading(true);
+    if (!message.trim() || !imageSrc || !passkey.trim()) {
+      notify('Enter a message, select an image, and provide a passkey.', 'warning');
+      return;
+    }
 
-      // Check if passkey is provided
-      if (!passkey) {
-        alert('Please enter a passkey.');
+    setIsLoading(true);
+    const image = new Image();
+    image.src = imageSrc;
+
+    image.onload = () => {
+      const canvas = document.createElement('canvas');
+      const context = canvas.getContext('2d');
+      canvas.width = image.width;
+      canvas.height = image.height;
+      context.drawImage(image, 0, 0);
+
+      const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+      const pixels = imageData.data;
+      const payload = `{${message.length}}${message}`;
+      const binaryMessage = payload.split('').map((char) => char.charCodeAt(0).toString(2).padStart(8, '0')).join('');
+      const passkeyBinary = passkey.split('').map((char) => char.charCodeAt(0).toString(2).padStart(8, '0')).join('');
+
+      if (binaryMessage.length * 4 > pixels.length) {
         setIsLoading(false);
+        notify('Message is too large for the selected image.', 'error');
         return;
       }
 
-      const image = new Image();
-      image.src = imageSrc;
+      for (let i = 0; i < binaryMessage.length; i += 1) {
+        pixels[i * 4] = (pixels[i * 4] & 0b11111110) | ((parseInt(binaryMessage[i], 2) + parseInt(passkeyBinary[i % passkeyBinary.length], 2)) % 2);
+      }
 
-      image.onload = () => {
-        const canvas = document.createElement('canvas');
-        const context = canvas.getContext('2d');
-
-        canvas.width = image.width;
-        canvas.height = image.height;
-
-        context.drawImage(image, 0, 0);
-
-        const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
-        const pixels = imageData.data;
-
-        const msgLen = message.length;
-        let prefix = `{${msgLen}}`;
-        setMessage(prefix + message);
-
-        const binaryMessage = (prefix + message)
-          .split('')
-          .map((char) => char.charCodeAt(0).toString(2).padStart(8, '0'))
-          .join('');
-
-        // Use passkey for additional encryption
-        const passkeyBinary = passkey
-          .split('')
-          .map((char) => char.charCodeAt(0).toString(2).padStart(8, '0'))
-          .join('');
-
-        for (let i = 0; i < binaryMessage.length; i++) {
-          pixels[i * 4] = (pixels[i * 4] & 0b11111110) | ((parseInt(binaryMessage[i], 2) + parseInt(passkeyBinary[i % passkeyBinary.length], 2)) % 2);
-        }
-
-        context.putImageData(imageData, 0, 0);
-
-        setEncodedImageSrc(canvas.toDataURL('image/png'));
-
-        // Display download button
-        setShowDownloadButton(true);
-
-        setIsLoading(false);
-      };
-
-      image.onerror = () => {
-        setIsLoading(false);
-        alert('Error loading the image. Please choose a valid image file.');
-      };
-    } catch (error) {
-      console.error('Error during encoding:', error);
-      alert('An error occurred during encoding. Please try again.');
+      context.putImageData(imageData, 0, 0);
+      setEncodedImageSrc(canvas.toDataURL('image/png'));
+      setDecodedMessage('');
       setIsLoading(false);
-    }
+      notify('Message hidden inside image.', 'success');
+    };
+
+    image.onerror = () => {
+      setIsLoading(false);
+      notify('Unable to load this image.', 'error');
+    };
   };
 
   const decodeMessage = async () => {
-    try {
-      setIsLoading(true);
+    if (!imageSrc || !passkey.trim()) {
+      notify('Select an encoded image and provide the passkey.', 'warning');
+      return;
+    }
 
-      // Check if passkey is provided
-      if (!passkey) {
-        alert('Please enter a passkey.');
-        setIsLoading(false);
+    setIsLoading(true);
+    const image = new Image();
+    image.src = imageSrc;
+
+    image.onload = () => {
+      const canvas = document.createElement('canvas');
+      const context = canvas.getContext('2d');
+      canvas.width = image.width;
+      canvas.height = image.height;
+      context.drawImage(image, 0, 0);
+
+      const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+      let binaryMessage = '';
+      for (let i = 0; i < pixels.length; i += 4) {
+        binaryMessage += (pixels[i] & 1).toString();
+      }
+
+      const passkeyBinary = passkey.split('').map((char) => char.charCodeAt(0).toString(2).padStart(8, '0')).join('');
+      let decryptedBinaryMessage = '';
+      for (let i = 0; i < binaryMessage.length; i += 1) {
+        decryptedBinaryMessage += ((parseInt(binaryMessage[i], 2) - parseInt(passkeyBinary[i % passkeyBinary.length], 2)) + 2) % 2;
+      }
+
+      let decoded = '';
+      for (let i = 0; i < decryptedBinaryMessage.length; i += 8) {
+        decoded += String.fromCharCode(parseInt(decryptedBinaryMessage.slice(i, i + 8), 2));
+      }
+
+      const match = decoded.match(/\{(\d+)\}/);
+      const msgLen = match ? parseInt(match[1], 10) : 0;
+      const cleanMessage = decoded.replace(/\{\d+\}/g, '').slice(0, msgLen);
+      setDecodedMessage(cleanMessage);
+      setEncodedImageSrc('');
+      setIsLoading(false);
+      notify(cleanMessage ? 'Message decoded.' : 'No hidden message found with this passkey.', cleanMessage ? 'success' : 'warning');
+    };
+
+    image.onerror = () => {
+      setIsLoading(false);
+      notify('Unable to load this image.', 'error');
+    };
+  };
+
+  const download = () => {
+    const content = operation === 'encrypt' ? encodedImageSrc : decodedMessage;
+    if (!content) return;
+
+    const link = document.createElement('a');
+    if (operation === 'encrypt') {
+      link.href = content;
+      link.download = 'encoded_image.png';
+    } else {
+      link.href = URL.createObjectURL(new Blob([content], { type: 'text/plain' }));
+      link.download = 'decoded_message.txt';
+    }
+    link.click();
+  };
+
+  const handleCloudSave = async () => {
+    if (!encodedImageSrc) {
+      notify('Encode an image before saving it.', 'warning');
+      return;
+    }
+
+    try {
+      setSaving(true);
+      if (isMockerEnabled()) {
+        await api.post('/api/rust/textimage', { encrypted_image_link: encodedImageSrc });
+        notify('Encoded image saved to mock history. The passkey was not stored.', 'success');
         return;
       }
 
-      const image = new Image();
-      image.src = imageSrc;
+      const cloudName = process.env.REACT_APP_CLOUDINARY_CLOUD_NAME;
+      const uploadPreset = process.env.REACT_APP_CLOUDINARY_UPLOAD_PRESET;
+      if (!cloudName || !uploadPreset) {
+        notify('Cloudinary environment variables are missing.', 'error');
+        return;
+      }
 
-      image.onload = () => {
-        const canvas = document.createElement('canvas');
-        const context = canvas.getContext('2d');
-
-        canvas.width = image.width;
-        canvas.height = image.height;
-
-        context.drawImage(image, 0, 0);
-
-        const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
-        const pixels = imageData.data;
-
-        let binaryMessage = '';
-        for (let i = 0; i < pixels.length; i += 4) {
-          binaryMessage += (pixels[i] & 1).toString();
-        }
-
-        // Use passkey for decryption
-        const passkeyBinary = passkey
-          .split('')
-          .map((char) => char.charCodeAt(0).toString(2).padStart(8, '0'))
-          .join('');
-
-        let decryptedBinaryMessage = '';
-        for (let i = 0; i < binaryMessage.length; i++) {
-          decryptedBinaryMessage += ((parseInt(binaryMessage[i], 2) - parseInt(passkeyBinary[i % passkeyBinary.length], 2)) + 2) % 2;
-        }
-
-        let message = '';
-        for (let i = 0; i < decryptedBinaryMessage.length; i += 8) {
-          message += String.fromCharCode(parseInt(decryptedBinaryMessage.slice(i, i + 8), 2));
-        }
-
-        let match = message.match(/\{(\d+)\}/);
-        let msgLen = match ? parseInt(match[1], 10) : null;
-
-        let stringWithoutNums = message.replace(/\{\d+\}/g, '');
-        stringWithoutNums = stringWithoutNums.slice(0, msgLen);
-        setDecodedMessage(stringWithoutNums);
-
-        // Display download button
-        setShowDownloadButton(true);
-
-        setIsLoading(false);
-      };
-
-      image.onerror = () => {
-        setIsLoading(false);
-        alert('Error loading the image. Please choose a valid image file.');
-      };
-    } catch (error) {
-      console.error('Error during decoding:', error);
-      alert('An error occurred during decoding. Please try again.');
-      setIsLoading(false);
-    }
-  };
-
-  const handleImageDownload = () => {
-    // Redirect to success page for download
-
-    window.location.href = '/success';
-    const link = document.createElement('a');
-    link.href = encodedImageSrc;
-    link.download = 'encoded_image.png';
-    link.click();
-  };
-
-  const handleTextDownload = () => {
-    window.location.href = '/success';
-    const blob = new Blob([decodedMessage], { type: 'text/plain' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = 'decoded_message.txt';
-    link.click();
-  }
-  const handleCloudSave = async () => {
-    try {
-      // Convert data URI to blob
       const blob = await fetch(encodedImageSrc).then((res) => res.blob());
-  
-      // Create FormData object
       const formData = new FormData();
       formData.append('file', blob);
-      formData.append('upload_preset', 'pctll1ta'); // Replace 'your_upload_preset' with your Cloudinary upload preset
-  
-      // Make POST request to Cloudinary upload API
-      const cloudinaryResponse = await axios.post('https://api.cloudinary.com/v1_1/dn5iikaas/image/upload', formData);
-  
-      console.log(cloudinaryResponse);
-  
-      const imageUrl = cloudinaryResponse.data.url;
-      setCloudUploadLink(cloudinaryResponse.data.url);
-      // Now imageUrl contains the URL of the uploaded image on Cloudinary
-      console.log('Image uploaded to Cloudinary:', imageUrl);
-      alert("Image stored in DB");
-
-
-      
-    try{
-      console.log("cloud upload link",cloudUploadLink);
-      const response =  axios.post('https://rustbackend.onrender.com/api/rust/textimage',{
-        user_id:user.id,
-        username:user.username,
-        encrypted_image_link:imageUrl,
-        key_used:passkey
+      formData.append('upload_preset', uploadPreset);
+      const cloudinaryResponse = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
+        method: 'POST',
+        body: formData,
       });
-      console.log(response);
-      alert("Data saved");
-    }catch(err){
-      console.log(err);
-    }
-      // Redirect to success page or perform any other actions
-      // window.location.href = '/success';
+      const cloudinaryData = await cloudinaryResponse.json();
+      if (!cloudinaryResponse.ok) {
+        throw new Error(cloudinaryData?.error?.message || 'Cloudinary upload failed');
+      }
+      await api.post('/api/rust/textimage', { encrypted_image_link: cloudinaryData.secure_url || cloudinaryData.url });
+      notify('Encoded image saved. The passkey was not stored.', 'success');
     } catch (error) {
-      console.error('Error uploading image to Cloudinary:', error);
-      alert('An error occurred while uploading the image to Cloudinary. Please try again.');
+      notify(error.message || 'Unable to save encoded image.', 'error');
+    } finally {
+      setSaving(false);
     }
-  };
-  
-  
-  
-
-  const handleOperationChange = (selectedOperation) => {
-    setOperation(selectedOperation);
-    setDecodedMessage('');
-    setShowDownloadButton(false);
   };
 
   return (
-    <div className="steganography-container">
-      <h1>React Steganography</h1>
-      <div className="operation-buttons">
-        <button
-          className={`operation-button ${operation === 'encrypt' ? 'active' : ''}`}
-          onClick={() => handleOperationChange('encrypt')}
-        >
-          Encrypt
-        </button>
-        <button
-          className={`operation-button ${operation === 'decrypt' ? 'active' : ''}`}
-          onClick={() => handleOperationChange('decrypt')}
-        >
-          Decrypt
-        </button>
-      </div>
-      {operation && (
-        <>
-          <div>
-            <label>{operation === 'encrypt' ? 'Enter Message:' : 'Choose Image:'}</label>
-            {operation === 'encrypt' ? (
-              <div>
-                <textarea
-                  value={message}
-                  onChange={(e) => {
-                    setMessage(e.target.value);
-                  }}
-                />
-                <div className="choose-image-container">
-                  <label htmlFor="choose-image" className="choose-image-label">
-                    Choose Image:
-                  </label>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    id="choose-image"
-                    className="choose-image-input"
-                    onChange={(e) => setImageSrc(URL.createObjectURL(e.target.files[0]))}
-                  />
-                  <label htmlFor="choose-image" className="choose-image-button">
-                    <BsCloudUpload style={{ marginRight: '8px' }} />
-                    Select Image e
-                  </label>
-                </div>
-              </div>
-            ) : (
-              <div className="drop-container">
-                <span className="drop-title">Drop files here</span>
-                OR
-                <input
-                  type="file"
-                  accept="image/*"
-                  id="choose-image"
-                  className="choose-image-input"
-                  onChange={(e) => setImageSrc(URL.createObjectURL(e.target.files[0]))}
-                />
-                <label htmlFor="choose-image" className="choose-image-button">
-                  <BsCloudUpload style={{ marginRight: '8px' }} />
-                  Select Image d
-                </label>
-              </div>
-            )}
-          </div>
-          <div style={{margin:"10px"}}>
-            <label>Passkey: </label>
-            <input
-              type="password"
-              value={passkey}
-              onChange={(e) => setPasskey(e.target.value)}
-            />
-          </div>
-          <div className='operationButton'>
-            <button
-              onClick={operation === 'encrypt' ? encodeMessage : decodeMessage}
-              disabled={isLoading}
-              >
-              {isLoading ? `${operation === 'encrypt' ? 'Encrypting...' : 'Decrypting...'}` : operation === 'encrypt' ? 'Encrypt Message' : 'Decrypt Message'}
-            </button>
-            {showDownloadButton && (
-              <button onClick={operation === "encrypt" ? handleImageDownload : handleTextDownload} className="download-button">
-                Download
-              </button>
-            )}
-          </div>
-          {decodedMessage && <div>Decoded Message: {decodedMessage}</div>}
-          {imageSrc && decodedMessage && (
-            <img
-              src={imageSrc}
-              alt={operation === 'encrypt' ? 'Encrypted Image' : 'Decrypted Image'}
-              className="result-image"
-            />
-          )}
-        </>
-      )}
-      <button onClick={handleCloudSave}>Cloud Save</button>
-    </div>
+    <PageShell>
+      <Stack spacing={3}>
+        <SectionHeader
+          eyebrow="Image message workflow"
+          title="Steganography"
+          description="Hide a message inside an image or recover one with a passkey you keep locally."
+        />
+        <Alert severity="info" sx={{ borderRadius: 2 }}>Passkeys are used locally and are not saved to Krypt history.</Alert>
+        <SurfacePanel>
+          <Stack spacing={3}>
+            <Tabs value={operation} onChange={(event, value) => { setOperation(value); setDecodedMessage(''); setEncodedImageSrc(''); }}>
+              <Tab value="encrypt" label="Encode" />
+              <Tab value="decrypt" label="Decode" />
+            </Tabs>
+            <Grid container spacing={3} sx={{ width: '100%', m: 0 }}>
+              <Grid item xs={12} md={6}>
+                <Stack spacing={2}>
+                  {operation === 'encrypt' ? (
+                    <TextField label="Message to hide" multiline minRows={6} fullWidth value={message} onChange={(event) => setMessage(event.target.value)} />
+                  ) : null}
+                  <Button variant="outlined" component="label" startIcon={<CloudUploadIcon />}>
+                    Select image
+                    <input type="file" accept="image/*" hidden onChange={handleImageChange} />
+                  </Button>
+                  <TextField label="Passkey" type="password" fullWidth value={passkey} onChange={(event) => setPasskey(event.target.value)} />
+                  <Button variant="contained" onClick={operation === 'encrypt' ? encodeMessage : decodeMessage} disabled={isLoading}>
+                    {isLoading ? <CircularProgress size={22} /> : operation === 'encrypt' ? 'Hide Message' : 'Decode Message'}
+                  </Button>
+                </Stack>
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <Stack spacing={2}>
+                  {imageSrc ? (
+                    <Box component="img" src={encodedImageSrc || imageSrc} alt="Steganography preview" sx={{ width: '100%', maxHeight: 340, objectFit: 'contain', bgcolor: 'action.hover', borderRadius: 2, border: '1px solid', borderColor: 'divider' }} />
+                  ) : (
+                    <Box sx={{ minHeight: 300, display: 'grid', placeItems: 'center', bgcolor: 'action.hover', color: 'text.secondary', borderRadius: 2, border: '1px dashed', borderColor: 'divider' }}>
+                      Image preview appears here.
+                    </Box>
+                  )}
+                  {decodedMessage ? <Alert severity="success">{decodedMessage}</Alert> : null}
+                  <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
+                    <Button startIcon={<DownloadIcon />} onClick={download} disabled={!encodedImageSrc && !decodedMessage}>
+                      Download
+                    </Button>
+                    <Button startIcon={<SaveIcon />} onClick={handleCloudSave} disabled={saving || !encodedImageSrc}>
+                      {saving ? 'Saving...' : 'Save encoded image'}
+                    </Button>
+                  </Stack>
+                </Stack>
+              </Grid>
+            </Grid>
+          </Stack>
+        </SurfacePanel>
+      </Stack>
+    </PageShell>
   );
 };
 

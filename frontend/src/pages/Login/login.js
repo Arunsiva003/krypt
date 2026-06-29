@@ -1,136 +1,92 @@
-import React , {useContext} from 'react';
-import {Link, useNavigate} from "react-router-dom";
-import Avatar from '@mui/material/Avatar';
-import Button from '@mui/material/Button';
-import CssBaseline from '@mui/material/CssBaseline';
-import TextField from '@mui/material/TextField';
-import FormControlLabel from '@mui/material/FormControlLabel';
-import Checkbox from '@mui/material/Checkbox';
-import Grid from '@mui/material/Grid';
-import Box from '@mui/material/Box';
-import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
-import Typography from '@mui/material/Typography';
-import Container from '@mui/material/Container';
-import { createTheme, ThemeProvider } from '@mui/material/styles';
-import axios from 'axios';
+import React, { useContext, useState } from 'react';
+import { Link as RouterLink, useNavigate } from "react-router-dom";
+import { Alert, Box, Button, Checkbox, FormControlLabel, Link, Stack, TextField, Typography } from '@mui/material';
+import LoginOutlinedIcon from '@mui/icons-material/LoginOutlined';
 import UserContext from '../../UserContext';
-
-function Copyright(props) {
-
-  return (
-    <Typography variant="body2" color="text.secondary" align="center" {...props}>
-      {'Copyright © '}
-      <Link color="inherit" href="https://mui.com/">
-        Your Website
-      </Link>{' '}
-      {new Date().getFullYear()}
-      {'.'}
-    </Typography>
-  );
-}
-
-const defaultTheme = createTheme();
+import api, { isMockerEnabled } from '../../api/client';
+import { useFeedback } from '../../components/Feedback/FeedbackProvider';
+import AuthLayout from '../../components/Layout/AuthLayout';
+import GoogleAuthButton from '../../components/GoogleAuthButton';
 
 const Login = () => {
-
-  const {user,setUser} = useContext(UserContext);
-  console.log("user:",user);
-  const { firstname = '', lastname = '', username = '', email = '', password = '' } = user || {};
-
+  const { setAuth } = useContext(UserContext);
+  const { notify } = useFeedback();
   const navigate = useNavigate();
-  const handleSubmit = (event) => {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleSubmit = async (event) => {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
     const email = data.get('email');
     const password = data.get('password');
 
-    axios.post("https://rustbackend.onrender.com/api/rust/users/login",{
-      email,
-      password
-    })
-    .then((res)=>{
-      console.log("after login:",res.data);
-      setUser(res.data);
-      navigate("/");
-      console.log("Usercontext user: in login:",user);
-    })
-    .catch((err)=>{
-      alert("Invalid username or password");
-    })
-
-  
-
+    try {
+      setIsSubmitting(true);
+      const response = await api.post('/api/rust/users/login', { email, password });
+      setAuth(response.data);
+      notify('Signed in successfully', 'success');
+      navigate('/home', { replace: true });
+    } catch (err) {
+      notify(err.response?.data?.error || 'Invalid email or password', 'error');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
-    <ThemeProvider theme={defaultTheme}>
-      <Container component="main" maxWidth="xs">
-        <CssBaseline />
-        <Box
-          sx={{
-            marginTop: 8,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-          }}
-        >
-          <Avatar sx={{ m: 1, bgcolor: 'secondary.main' }}>
-            <LockOutlinedIcon />
-          </Avatar>
-          <Typography component="h1" variant="h5">
-            Sign in
+    <AuthLayout title="Sign in" subtitle="Open your encrypted workspace and continue where you left off.">
+      <Stack component="form" onSubmit={handleSubmit} spacing={2.2} noValidate>
+        {isMockerEnabled() ? (
+          <Alert severity="info">
+            Mock mode is active. Use `demo@krypt.local` with the local demo passphrase.
+          </Alert>
+        ) : null}
+        <TextField
+          required
+          fullWidth
+          id="email"
+          label="Email address"
+          name="email"
+          autoComplete="email"
+          autoFocus
+        />
+        <TextField
+          required
+          fullWidth
+          name="password"
+          label="Password"
+          type="password"
+          id="password"
+          autoComplete="current-password"
+        />
+        <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={2}>
+          <FormControlLabel control={<Checkbox value="remember" color="primary" />} label="Keep me signed in" />
+          <Typography variant="body2" color="text.secondary">
+            Reset coming soon
           </Typography>
-          <Box component="form" onSubmit={handleSubmit} noValidate sx={{ mt: 1 }}>
-            <TextField
-              margin="normal"
-              required
-              fullWidth
-              id="email"
-              label="Email Address"
-              name="email"
-              autoComplete="email"
-              autoFocus
-            />
-            <TextField
-              margin="normal"
-              required
-              fullWidth
-              name="password"
-              label="Password"
-              type="password"
-              id="password"
-              autoComplete="current-password"
-            />
-            <FormControlLabel
-              control={<Checkbox value="remember" color="primary" />}
-              label="Remember me"
-            />
-            <Button
-              type="submit"
-              fullWidth
-              variant="contained"
-              sx={{ mt: 3, mb: 2 }}
-            >
-              Sign In
-            </Button>
-            <Grid container>
-              <Grid item xs>
-                <Link href="#" variant="body2">
-                  Forgot password?
-                </Link>
-              </Grid>
-              <Grid item>
-                <Link to="/signup" variant="body2">
-                  {"Don't have an account? Sign Up"}
-                </Link>
-              </Grid>
-            </Grid>
-          </Box>
+        </Stack>
+        <Button
+          type="submit"
+          fullWidth
+          size="large"
+          variant="contained"
+          startIcon={<LoginOutlinedIcon />}
+          disabled={isSubmitting}
+        >
+          {isSubmitting ? 'Signing in...' : 'Sign in'}
+        </Button>
+        <GoogleAuthButton />
+        <Box sx={{ textAlign: 'center' }}>
+          <Typography variant="body2" color="text.secondary">
+            New to Krypt?{' '}
+            <Link component={RouterLink} to="/signup" underline="hover" fontWeight={750}>
+              Create an account
+            </Link>
+          </Typography>
         </Box>
-        <Copyright sx={{ mt: 8, mb: 4 }} />
-      </Container>
-    </ThemeProvider>
+      </Stack>
+    </AuthLayout>
   );
-}
+};
 
 export default Login;

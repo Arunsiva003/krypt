@@ -1,31 +1,24 @@
-import React, { useState, useEffect, useContext } from 'react';
-import { Typography, Grid, Card, CardContent, IconButton, Button, TextField, CircularProgress } from '@mui/material';
-import VisibilityIcon from '@mui/icons-material/Visibility';
-import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
-import FileCopyIcon from '@mui/icons-material/FileCopy';
-import ImageIcon from '@mui/icons-material/Image';
+import React, { useEffect, useState } from 'react';
+import { Alert, Button, Card, CardContent, CircularProgress, Grid, IconButton, Stack, Typography } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
-import UserContext from '../../UserContext';
-import axios from 'axios';
+import DownloadIcon from '@mui/icons-material/Download';
+import api from '../../api/client';
+import { useFeedback } from '../Feedback/FeedbackProvider';
 
-const ImageEncryptionDashboard = () => {
+const ImageEncryptionDashboard = ({ onCountChange }) => {
   const [imageEncryptions, setImageEncryptions] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
-  const {user} = useContext(UserContext);
+  const { notify } = useFeedback();
 
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const response = await axios.get(`https://rustbackend.onrender.com/api/rust/image/${user.id}`);
+    api.get('/api/rust/image')
+      .then((response) => {
         setImageEncryptions(response.data);
-        setIsLoading(false);
-      } catch (error) {
-        console.error('Error fetching image encryptions:', error);
-        setIsLoading(false);
-      }
-    };
-    fetchData();
-  }, []);
+        onCountChange?.(response.data.length);
+      })
+      .catch((error) => notify(error.response?.data?.error || 'Unable to fetch image history.', 'error'))
+      .finally(() => setIsLoading(false));
+  }, [notify, onCountChange]);
 
   const handleDownloadImage = (encryptedImageLink, id) => {
     const link = document.createElement('a');
@@ -34,80 +27,50 @@ const ImageEncryptionDashboard = () => {
     link.click();
   };
 
-  const handleCopyToClipboard = (text) => {
-    navigator.clipboard.writeText(text);
-  };
-
-  const toggleVisibility = (id) => {
-    const keyField = document.getElementById(`key-${id}`);
-    keyField.type = keyField.type === 'text' ? 'password' : 'text';
-  };
-
   const handleDelete = async (id) => {
+    if (!window.confirm('Delete this saved image encryption?')) return;
     try {
-      await axios.delete(`https://rustbackend.onrender.com/api/rust/image/${id}`);
-      setImageEncryptions(imageEncryptions.filter(encryption => encryption.id !== id));
-      alert('Encryption deleted successfully.');
+      await api.delete(`/api/rust/image/${id}`);
+      setImageEncryptions((items) => {
+        const nextItems = items.filter((encryption) => encryption.id !== id);
+        onCountChange?.(nextItems.length);
+        return nextItems;
+      });
+      notify('Image encryption deleted.', 'success');
     } catch (error) {
-      console.error('Error deleting encryption:', error);
-      alert('An error occurred while deleting the encryption. Please try again.');
+      notify(error.response?.data?.error || 'Unable to delete image encryption.', 'error');
     }
   };
 
+  if (isLoading) {
+    return <Stack alignItems="center" sx={{ py: 5 }}><CircularProgress size={30} /></Stack>;
+  }
+
+  if (imageEncryptions.length === 0) {
+    return <Alert severity="info">No saved image encryptions yet.</Alert>;
+  }
+
   return (
-    <div style={{ padding: '20px' }}>
-      <Typography variant="h4" align="center" gutterBottom>
-        Image Encryptions
-      </Typography>
-      {isLoading ? (
-        <div style={{ display: 'flex', justifyContent: 'center' }}>
-        <CircularProgress size={30} />
-      </div>
-      ) : (
-        <Grid container spacing={2}>
-          { imageEncryptions.length !== 0 ? 
-            imageEncryptions.map((encryption) => (
-              <Grid item key={encryption.id} xs={12} sm={6} md={4} lg={3}>
-                <Card style={{ height: '100%' }}>
-                  <CardContent>
-                    <Typography variant="h6" gutterBottom>
-                      <ImageIcon /> Encrypted Image
-                    </Typography>
-                    {/* <img src={encryption.encrypted_image_link} alt="Encrypted" style={{ maxWidth: '100%', maxHeight: '200px', marginBottom: '10px' }} /> */}
-                    <Typography variant="h6" gutterBottom>
-                      Key Used
-                    </Typography>
-                    <TextField
-                      id={`key-${encryption.id}`}
-                      type="password"
-                      value={encryption.key_used}
-                      InputProps={{
-                        readOnly: true,
-                      }}
-                    />
-                    <IconButton size="small" onClick={() => toggleVisibility(encryption.id)}>
-                      {encryption.showPassword ? <VisibilityOffIcon /> : <VisibilityIcon />}
-                    </IconButton>
-                    <IconButton size="small" onClick={() => handleCopyToClipboard(encryption.key_used)}>
-                      <FileCopyIcon />
-                    </IconButton>
-                    <IconButton size="small" onClick={() => handleDelete(encryption.id)}>
-                      <DeleteIcon />
-                    </IconButton>
-                    <br />
-                    <br />
-                    <Button onClick={() => handleDownloadImage(encryption.encrypted_image_link, encryption.id)}>
-                      Download Encrypted Image
-                    </Button>
-                  </CardContent>
-                </Card>
-              </Grid>
-            )) :
-            <p>No Data</p>
-          }
+    <Grid container spacing={2}>
+      {imageEncryptions.map((encryption) => (
+        <Grid item key={encryption.id} xs={12} sm={6} md={4}>
+          <Card sx={{ height: '100%' }}>
+            <CardContent>
+              <Stack spacing={2}>
+                <Typography variant="h6">Encrypted Image</Typography>
+                <Alert severity="info">Key not stored</Alert>
+                <Button startIcon={<DownloadIcon />} onClick={() => handleDownloadImage(encryption.encrypted_image_link, encryption.id)}>
+                  Download
+                </Button>
+                <IconButton aria-label="Delete encrypted image" onClick={() => handleDelete(encryption.id)}>
+                  <DeleteIcon />
+                </IconButton>
+              </Stack>
+            </CardContent>
+          </Card>
         </Grid>
-      )}
-    </div>
+      ))}
+    </Grid>
   );
 };
 

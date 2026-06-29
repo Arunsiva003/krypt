@@ -1,103 +1,148 @@
 import React from "react";
-import { Link, useNavigate } from "react-router-dom";
-import Card from "@mui/material/Card";
-import CardContent from "@mui/material/CardContent";
-import Typography from "@mui/material/Typography";
-import Grid from "@mui/material/Grid";
-import TextsmsIcon from "@mui/icons-material/Textsms";
-import ImageSearchIcon from "@mui/icons-material/ImageSearch";
-// import ImageBitmap from ""
-import LockIcon from '@mui/icons-material/Lock';
-// import QrCodeIcon from "@mui/icons-material/QrCode";
+import { useNavigate } from "react-router-dom";
+import {
+  Box,
+  Card,
+  CardActionArea,
+  CardContent,
+  Chip,
+  Container,
+  Grid,
+  Stack,
+  Typography,
+} from "@mui/material";
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
-import { useTheme } from "@mui/material/styles";
-import useMediaQuery from "@mui/material/useMediaQuery";
+import SectionHeader from "../Layout/SectionHeader";
+import { labTools, mvpTools, secondaryTools } from "../../toolCatalog";
 
 const KryptOption = () => {
-  const theme = useTheme();
   const navigate = useNavigate();
 
-  const choices = [
-    {
-      name: "textToText",
-      link: "",
-      description: "Convert text to another text format.Convert text to another text format.Convert text to another text format.",
-      icon: <TextsmsIcon fontSize="large" />,
-    },
-    {
-      name: "steganoGraphy",
-      link: "",
-      description: "Hide information within an image.Hide information within an image.Hide information within an image.",
-      icon: <ImageSearchIcon fontSize="large" />,
-    },
-    {
-      name: "ImageEncryption",
-      link: "",
-      description: "Hide your image content by encrypting it and converting it to invalid format. Decrypt to recover the image",
-      icon: <LockIcon fontSize="large" />,
-    },
-  ];
-
-  const cardContainerStyle = {
-    display: 'flex',
-    justifyContent: 'center',
-    padding: "50px",
-  };
-
-  const cardStyle = {
-    width: '90%',
-    height: '100%',
-    display: "flex",
-    flexDirection: "column",
-    justifyContent: "space-between",
-    borderRadius: "10px",
-    boxShadow: "0 4px 8px rgba(0, 0, 0, 0.1)",
-    transition: "transform 0.3s ease-in-out",
-    cursor: "pointer",
-    "&:hover": {
-      transform: "scale(1.05)",
-    },
-  };
-
-  const iconStyle = {
-    margin: "0 auto",
-    color: "#3f51b5",
-    paddingTop: "20px",
-  };
-
-  const navigateToLink = (link) => {
-    navigate(link)
-    console.log(`Navigating to: ${link}`);
-  };
-
-  // Use MUI's useMediaQuery to determine the screen size
-  const isSmScreen = useMediaQuery(theme.breakpoints.down("sm"));
-
   return (
-    <Grid container spacing={2} style={cardContainerStyle}>
-      {choices.map((choice, ind) => (
-        <Grid item xs={12} sm={isSmScreen ? 12 : 6} md={4} key={ind}>
-          <Card
-            style={cardStyle}
-            onClick={() => navigateToLink(`/krypt/${choice.name}`)}
-          >
-            <CardContent style={{ textAlign: 'center' }}>
-              {choice.icon && <div style={iconStyle}>{choice.icon}</div>}
-            <br/>
-            <Typography variant="h5" component="div">
-            {choice.name.charAt(0).toUpperCase() + choice.name.slice(1)}
-            </Typography>
-
-              <br/>
-              <Typography variant="body2" color="text.secondary">
-                {choice.description}
-              </Typography>
-            </CardContent>
-            <ArrowForwardIcon style={{ margin: "0 auto", color: "#3f51b5" }} />
-          </Card>
+    <Box id="tools" component="section" sx={{ py: { xs: 5, md: 7 } }}>
+      <Container maxWidth="xl">
+        <SectionHeader eyebrow="Tool suite" title="Choose a workflow" description="Core tools stay prominent, while secondary and Labs tools are grouped for easy scanning." />
+        <SectionHeader eyebrow="MVP" title="Core workflows" description="The existing Krypt workflows remain the primary product surface." sx={{ mb: 2 }} />
+        <Grid container spacing={2.5}>
+          {mvpTools.map((choice) => {
+            const Icon = choice.icon;
+            return (
+            <Grid item xs={12} sm={6} lg={3} key={choice.name}>
+              <Card
+                sx={{
+                  height: '100%',
+                  overflow: 'hidden',
+                  transition: 'transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease',
+                  '&:hover': {
+                    transform: 'translateY(-4px)',
+                    boxShadow: 6,
+                    borderColor: choice.accent,
+                  },
+                }}
+              >
+                <CardActionArea onClick={() => navigate(choice.route)} sx={{ height: '100%' }}>
+                  <CardContent sx={{ minHeight: 318, height: '100%', display: 'flex', flexDirection: 'column', gap: 2.2, textAlign: 'left' }}>
+                    <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
+                      <Box
+                        sx={{
+                          width: 52,
+                          height: 52,
+                          display: 'grid',
+                          placeItems: 'center',
+                          borderRadius: 2,
+                          bgcolor: `${choice.accent}17`,
+                          color: choice.accent,
+                          '& svg': { fontSize: 28 },
+                        }}
+                      >
+                          <Icon />
+                      </Box>
+                      <Chip size="small" label={choice.detail} sx={{ bgcolor: 'action.hover' }} />
+                    </Stack>
+                    <Box>
+                      <Typography variant="h5" sx={{ mb: 1 }}>
+                        {choice.name}
+                      </Typography>
+                      <Typography color="text.secondary" sx={{ lineHeight: 1.65 }}>
+                        {choice.description}
+                      </Typography>
+                    </Box>
+                    <Box sx={{ flexGrow: 1 }} />
+                    <Box
+                      component="span"
+                      sx={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 0.75,
+                        alignSelf: 'flex-start',
+                        color: choice.accent,
+                        px: 0,
+                        fontWeight: 750,
+                      }}
+                    >
+                      Open workflow
+                      <ArrowForwardIcon fontSize="small" />
+                    </Box>
+                  </CardContent>
+                </CardActionArea>
+              </Card>
+            </Grid>
+          )})}
         </Grid>
-      ))}
-    </Grid>
+        <SectionHeader eyebrow="Secondary" title="Practical security helpers" description="Useful tools for file privacy, integrity checks, notes, and cleanup." sx={{ mt: 6, mb: 2 }} />
+        <Grid container spacing={2.5}>
+          {secondaryTools.map((choice) => {
+            const Icon = choice.icon;
+            return (
+              <Grid item xs={12} sm={6} lg={4} key={choice.name}>
+                <Card sx={{ height: '100%', overflow: 'hidden', transition: 'transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease', '&:hover': { transform: 'translateY(-4px)', boxShadow: 6, borderColor: choice.accent } }}>
+                  <CardActionArea onClick={() => navigate(choice.route)} sx={{ height: '100%' }}>
+                    <CardContent sx={{ minHeight: 250, height: '100%', display: 'flex', flexDirection: 'column', gap: 2, textAlign: 'left' }}>
+                      <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
+                        <Box sx={{ width: 48, height: 48, display: 'grid', placeItems: 'center', borderRadius: 2, bgcolor: `${choice.accent}17`, color: choice.accent, '& svg': { fontSize: 26 } }}><Icon /></Box>
+                        <Chip size="small" label={choice.detail} sx={{ bgcolor: 'action.hover' }} />
+                      </Stack>
+                      <Box>
+                        <Typography variant="h5" sx={{ mb: 1 }}>{choice.name}</Typography>
+                        <Typography color="text.secondary" sx={{ lineHeight: 1.65 }}>{choice.description}</Typography>
+                      </Box>
+                      <Box sx={{ flexGrow: 1 }} />
+                      <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, alignSelf: 'flex-start', color: choice.accent, px: 0, fontWeight: 750 }}>Open workflow<ArrowForwardIcon fontSize="small" /></Box>
+                    </CardContent>
+                  </CardActionArea>
+                </Card>
+              </Grid>
+            );
+          })}
+        </Grid>
+        <SectionHeader eyebrow="Labs" title="Experimental privacy workflows" description="Out-of-the-box tools that make Krypt more memorable." sx={{ mt: 6, mb: 2 }} />
+        <Grid container spacing={2.5}>
+          {labTools.map((choice) => {
+            const Icon = choice.icon;
+            return (
+              <Grid item xs={12} md={4} key={choice.name}>
+                <Card sx={{ height: '100%', overflow: 'hidden', transition: 'transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease', '&:hover': { transform: 'translateY(-4px)', boxShadow: 6, borderColor: choice.accent } }}>
+                  <CardActionArea onClick={() => navigate(choice.route)} sx={{ height: '100%' }}>
+                    <CardContent sx={{ minHeight: 250, height: '100%', display: 'flex', flexDirection: 'column', gap: 2, textAlign: 'left' }}>
+                      <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
+                        <Box sx={{ width: 48, height: 48, display: 'grid', placeItems: 'center', borderRadius: 2, bgcolor: `${choice.accent}17`, color: choice.accent, '& svg': { fontSize: 26 } }}><Icon /></Box>
+                        <Chip size="small" label={choice.detail} sx={{ bgcolor: 'action.hover' }} />
+                      </Stack>
+                      <Box>
+                        <Typography variant="h5" sx={{ mb: 1 }}>{choice.name}</Typography>
+                        <Typography color="text.secondary" sx={{ lineHeight: 1.65 }}>{choice.description}</Typography>
+                      </Box>
+                      <Box sx={{ flexGrow: 1 }} />
+                      <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, alignSelf: 'flex-start', color: choice.accent, px: 0, fontWeight: 750 }}>Open workflow<ArrowForwardIcon fontSize="small" /></Box>
+                    </CardContent>
+                  </CardActionArea>
+                </Card>
+              </Grid>
+            );
+          })}
+        </Grid>
+      </Container>
+    </Box>
   );
 };
 

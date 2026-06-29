@@ -1,31 +1,25 @@
-import React, { useState, useEffect, useContext } from 'react';
-import { Typography, Grid, Card, CardContent, TextField, IconButton, Modal, Button, Container, CircularProgress } from '@mui/material';
-import VisibilityIcon from '@mui/icons-material/Visibility';
-import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
-import FileCopyIcon from '@mui/icons-material/FileCopy';
+import React, { useEffect, useState } from 'react';
+import { Alert, Button, Card, CardContent, CircularProgress, Grid, IconButton, Stack, Typography } from '@mui/material';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import DeleteIcon from '@mui/icons-material/Delete';
-import axios from 'axios';
-import UserContext from '../../UserContext';
+import DownloadIcon from '@mui/icons-material/Download';
+import api from '../../api/client';
+import { useFeedback } from '../Feedback/FeedbackProvider';
 
-const TextEncryptionDashboard = () => {
+const TextEncryptionDashboard = ({ onCountChange }) => {
   const [textEncryptions, setTextEncryptions] = useState([]);
-  const [openModal, setOpenModal] = useState(false);
-  const [selectedText, setSelectedText] = useState('');
-  const {user} = useContext(UserContext);
   const [isLoading, setIsLoading] = useState(true);
- 
+  const { notify } = useFeedback();
+
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const response = await axios.get(`https://rustbackend.onrender.com/api/rust/text/${user.id}`);
+    api.get('/api/rust/text')
+      .then((response) => {
         setTextEncryptions(response.data);
-        setIsLoading(false);
-      } catch (error) {
-        console.error('Error fetching encryption data:', error);
-      }
-    };
-    fetchData();
-  }, [user.id]);
+        onCountChange?.(response.data.length);
+      })
+      .catch((error) => notify(error.response?.data?.error || 'Unable to fetch text history.', 'error'))
+      .finally(() => setIsLoading(false));
+  }, [notify, onCountChange]);
 
   const handleDownloadTextFile = (encryptedText, id) => {
     const blob = new Blob([encryptedText], { type: 'text/plain' });
@@ -35,107 +29,65 @@ const TextEncryptionDashboard = () => {
     link.click();
   };
 
-  const handleViewFullText = (encryptedText) => {
-    setSelectedText(encryptedText);
-    setOpenModal(true);
-  };
-
-  const handleCloseModal = () => {
-    setOpenModal(false);
-    setSelectedText('');
-  };
-
-  const handleCopyToClipboard = () => {
-    navigator.clipboard.writeText(selectedText);
-  };
-
-  const togglePasswordVisibility = (id) => {
-    const passwordField = document.getElementById(`password-${id}`);
-    passwordField.type = passwordField.type === 'text' ? 'password' : 'text';
+  const handleCopyToClipboard = async (text) => {
+    await navigator.clipboard.writeText(text);
+    notify('Encrypted text copied.', 'success');
   };
 
   const handleDelete = async (id) => {
+    if (!window.confirm('Delete this saved text encryption?')) return;
     try {
-      await axios.delete(`https://rustbackend.onrender.com/api/rust/text/${id}`);
-      setTextEncryptions(textEncryptions.filter(encryption => encryption.id !== id));
-      alert('Encryption deleted successfully.');
+      await api.delete(`/api/rust/text/${id}`);
+      setTextEncryptions((items) => {
+        const nextItems = items.filter((encryption) => encryption.id !== id);
+        onCountChange?.(nextItems.length);
+        return nextItems;
+      });
+      notify('Encryption deleted.', 'success');
     } catch (error) {
-      console.error('Error deleting encryption:', error);
-      alert('An error occurred while deleting the encryption. Please try again.');
+      notify(error.response?.data?.error || 'Unable to delete encryption.', 'error');
     }
   };
 
+  if (isLoading) {
+    return <Stack alignItems="center" sx={{ py: 5 }}><CircularProgress size={30} /></Stack>;
+  }
+
+  if (textEncryptions.length === 0) {
+    return <Alert severity="info">No saved text encryptions yet.</Alert>;
+  }
+
   return (
-    <Container style={{ padding: '20px' }}>
-      <Typography variant="h4" align="center" gutterBottom>
-        Text Encryptions
-      </Typography>
-      {isLoading ? (
-        <div style={{ display: 'flex', justifyContent: 'center' }}>
-          <CircularProgress size={30} />
-        </div>
-      ) : (
-        <Grid container spacing={2}>
-          {textEncryptions.length !== 0 ? (
-            textEncryptions.map((encryption) => (
-              <Grid item key={encryption.id} xs={12} sm={6} md={4} lg={3}>
-                <Card>
-                  <CardContent>
-                    <Typography variant="h6" gutterBottom>
-                      Encrypted Text
-                    </Typography>
-                    <Typography variant="body1" paragraph>
-                      {encryption.encrypted_text.length > 100
-                        ? `${encryption.encrypted_text.substring(0, 100)}...`
-                        : encryption.encrypted_text}
-                    </Typography>
-                    {encryption.encrypted_text.length > 100 && (
-                      <IconButton size="small" onClick={() => handleViewFullText(encryption.encrypted_text)}>
-                        <VisibilityIcon />
-                      </IconButton>
-                    )}
-                    <Typography variant="h6" gutterBottom>
-                      Key Used
-                    </Typography>
-                    <TextField
-                      id={`password-${encryption.id}`}
-                      type="password"
-                      value={encryption.key_used}
-                      InputProps={{
-                        readOnly: true,
-                      }}
-                    />
-                    <IconButton size="small" onClick={() => togglePasswordVisibility(encryption.id)}>
-                      {encryption.showPassword ? <VisibilityOffIcon /> : <VisibilityIcon />}
-                    </IconButton>
-                    <br />
-                    <br />
-                    <Button onClick={() => handleDownloadTextFile(encryption.encrypted_text, encryption.id)}>
-                      Download Encrypted Text
-                    </Button>
-                    <IconButton onClick={() => handleDelete(encryption.id)}><DeleteIcon /></IconButton>
-                  </CardContent>
-                </Card>
-              </Grid>
-            ))
-          ) : (
-            <Typography variant="body1" align="center">No Data</Typography>
-          )}
+    <Grid container spacing={2}>
+      {textEncryptions.map((encryption) => (
+        <Grid item key={encryption.id} xs={12} sm={6} md={4}>
+          <Card sx={{ height: '100%' }}>
+            <CardContent>
+              <Stack spacing={2}>
+                <Typography variant="h6">Encrypted Text</Typography>
+                <Typography variant="body2" sx={{ wordBreak: 'break-word' }}>
+                  {encryption.encrypted_text.length > 140
+                    ? `${encryption.encrypted_text.substring(0, 140)}...`
+                    : encryption.encrypted_text}
+                </Typography>
+                <Alert severity="info">Key not stored</Alert>
+                <Stack direction="row" spacing={1}>
+                  <IconButton aria-label="Copy encrypted text" onClick={() => handleCopyToClipboard(encryption.encrypted_text)}>
+                    <ContentCopyIcon />
+                  </IconButton>
+                  <IconButton aria-label="Delete encrypted text" onClick={() => handleDelete(encryption.id)}>
+                    <DeleteIcon />
+                  </IconButton>
+                </Stack>
+                <Button startIcon={<DownloadIcon />} onClick={() => handleDownloadTextFile(encryption.encrypted_text, encryption.id)}>
+                  Download
+                </Button>
+              </Stack>
+            </CardContent>
+          </Card>
         </Grid>
-      )}
-      <Modal open={openModal} onClose={handleCloseModal}>
-        <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', background: 'white', padding: '20px', borderRadius: '8px', width: '50vh', maxHeight: '80vh', overflowY: 'auto' }}>
-          <Typography variant="h5" gutterBottom>
-            Full Encrypted Text
-          </Typography>
-          <div style={{ whiteSpace: 'pre-wrap', overflowY: 'auto', maxHeight: 'calc(80vh - 100px)' }}>{selectedText}</div>
-          <Button onClick={handleCopyToClipboard} style={{ marginTop: '10px' }}>
-            <FileCopyIcon />
-            Copy to Clipboard
-          </Button>
-        </div>
-      </Modal>
-    </Container>
+      ))}
+    </Grid>
   );
 };
 

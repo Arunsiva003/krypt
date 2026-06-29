@@ -1,79 +1,72 @@
-import React, { useState, useContext } from 'react';
-import { TextField, Button, TextareaAutosize, Divider, Typography, Paper, Grid, Container, Modal, Box } from '@mui/material';
-import FileCopyIcon from '@mui/icons-material/FileCopy';
-import UserContext from '../../UserContext';
-import axios from 'axios';
+import React, { useState } from 'react';
+import { Alert, Box, Button, Chip, Grid, Stack, TextField, Typography } from '@mui/material';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import DownloadIcon from '@mui/icons-material/Download';
+import SaveIcon from '@mui/icons-material/Save';
+import api from '../../api/client';
+import { decryptTextPackage, encryptTextPackage, randomBase64 } from '../../cryptoUtils';
+import { useFeedback } from '../Feedback/FeedbackProvider';
+import PageShell from '../Layout/PageShell';
+import SectionHeader from '../Layout/SectionHeader';
+import SurfacePanel from '../Layout/SurfacePanel';
+
+const generateRandomKey = () => randomBase64(24);
 
 const TextEncrypt = () => {
   const [text, setText] = useState('');
   const [key, setKey] = useState(generateRandomKey());
   const [encryptedText, setEncryptedText] = useState('');
   const [decryptedText, setDecryptedText] = useState('');
-  const [showFullModal, setShowFullModal] = useState(false);
-  const [fullText, setFullText] = useState('');
-  const {user} = useContext(UserContext);
+  const [processing, setProcessing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const { notify } = useFeedback();
+  const outputValue = encryptedText || decryptedText;
+  const outputFileName = encryptedText ? 'encrypted_text.krypt.json' : 'decrypted_text.txt';
 
-  function generateRandomKey(length = 16) {
-    const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-    let key = '';
-    for (let i = 0; i < length; i++) {
-      key += characters.charAt(Math.floor(Math.random() * characters.length));
+  const handleEncrypt = async () => {
+    if (!text.trim() || !key.trim()) {
+      notify('Enter text and a key before encrypting.', 'warning');
+      return;
     }
-    return key;
-  }
-
-  const handleTextChange = (event) => {
-    setText(event.target.value);
-  };
-
-  const handleKeyChange = (event) => {
-    setKey(event.target.value);
-  };
-
-  const handleEncrypt = () => {
-    const encrypted = encryptText(text, key);
-    setEncryptedText(encrypted);
-    setFullText(encrypted);
-  };
-
-  const handleDecrypt = () => {
-    const decrypted = decryptText(text, key);
-    setDecryptedText(decrypted);
-    setFullText(decrypted);
-  };
-
-  const handleCopyToClipboard = (textAreaId) => {
-    const textArea = document.getElementById(textAreaId);
-    textArea.select();
-    document.execCommand('copy');
-  };
-
-  const encryptText = (plainText, encryptionKey) => {
-    let encrypted = '';
-    for (let i = 0; i < plainText.length; i++) {
-      const charCode = plainText.charCodeAt(i);
-      const keyChar = encryptionKey.charCodeAt(i % encryptionKey.length);
-      const encryptedCharCode = (charCode + keyChar) % 256; // One-time pad
-      encrypted += String.fromCharCode(encryptedCharCode);
+    try {
+      setProcessing(true);
+      const encrypted = await encryptTextPackage(text, key, { tool: 'text-encryption' });
+      setEncryptedText(JSON.stringify(encrypted, null, 2));
+      setDecryptedText('');
+      notify('Text encrypted with AES-GCM. Keep your key safe; Krypt does not store it.', 'success');
+    } catch {
+      notify('Unable to encrypt this text in your browser.', 'error');
+    } finally {
+      setProcessing(false);
     }
-    console.log(encrypted);
-    return btoa(encrypted); // Base64 encode for better representation
   };
 
-  const decryptText = (cipherText, decryptionKey) => {
-    console.log("cipher:", cipherText);
-    const decodedCipherText = atob(cipherText);
-    let decrypted = '';
-    for (let i = 0; i < decodedCipherText.length; i++) {
-      const charCode = decodedCipherText.charCodeAt(i);
-      const keyChar = decryptionKey.charCodeAt(i % decryptionKey.length);
-      const decryptedCharCode = (charCode - keyChar + 256) % 256; // One-time pad
-      decrypted += String.fromCharCode(decryptedCharCode);
+  const handleDecrypt = async () => {
+    if (!text.trim() || !key.trim()) {
+      notify('Paste encrypted text and enter the key before decrypting.', 'warning');
+      return;
     }
-    return decrypted;
+    try {
+      setProcessing(true);
+      const pkg = JSON.parse(text);
+      setDecryptedText(await decryptTextPackage(pkg, key));
+      setEncryptedText('');
+      notify('Text decrypted.', 'success');
+    } catch {
+      notify('Unable to decrypt this AES-GCM package with the provided key.', 'error');
+    } finally {
+      setProcessing(false);
+    }
   };
 
-  const handleDownload = (fileName, content) => {
+  const copy = async (value) => {
+    if (!value) return;
+    await navigator.clipboard.writeText(value);
+    notify('Copied to clipboard.', 'success');
+  };
+
+  const download = (fileName, content) => {
+    if (!content) return;
     const blob = new Blob([content], { type: 'text/plain' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
@@ -81,314 +74,101 @@ const TextEncrypt = () => {
     link.click();
   };
 
-
-  const handleCloudSave = async () => {      
-    try{
-      const response =  axios.post('https://rustbackend.onrender.com/api/rust/text',{
-        user_id:user.id,
-        username:user.username,
-        encrypted_text:encryptedText,
-        key_used:key
-      });
-      console.log(response);
-      alert("Data saved");
-    }catch(err){
-      console.log(err);
+  const handleCloudSave = async () => {
+    if (!encryptedText) {
+      notify('Encrypt text before saving it.', 'warning');
+      return;
     }
-  }
-
-  const handleViewFull = () => {
-    setShowFullModal(true);
-  };
-
-  const handleCloseFullModal = () => {
-    setShowFullModal(false);
+    try {
+      setSaving(true);
+      await api.post('/api/rust/text', { encrypted_text: encryptedText });
+      notify('Encrypted text saved. The key was not stored.', 'success');
+    } catch (err) {
+      notify(err.response?.data?.error || 'Unable to save encrypted text.', 'error');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
-    <Container maxWidth="md">
-      <Paper elevation={3} style={{ padding: '20px', margin: '20px', textAlign: 'center' }}>
-        <Typography variant="h4">Text Encryption & Decryption</Typography>
-        <Divider style={{ margin: '20px 0' }} />
-        <Grid container spacing={2} justifyContent="center">
-          <Grid item xs={12}>
-            <TextField
-              label="Enter Text"
-              variant="outlined"
-              multiline
-              rows={6}
-              fullWidth
-              value={text}
-              onChange={handleTextChange}
-            />
-          </Grid>
-          <Grid item xs={12}>
-            <TextField
-              label="Enter Encryption/Decryption Key"
-              variant="outlined"
-              fullWidth
-              value={key}
-              onChange={handleKeyChange}
-            />
+    <PageShell>
+      <Stack spacing={3}>
+        <SectionHeader
+          eyebrow="Local text workflow"
+          title="Text Encryption"
+          description="Encrypt or decrypt text in the browser, then copy, download, or save encrypted output to your history."
+          action={<Chip color="success" label="Key never stored" />}
+        />
+        <Alert severity="info" sx={{ borderRadius: 2 }}>
+          Krypt encrypts with AES-GCM in your browser and saves encrypted output only. Your key is never persisted.
+        </Alert>
+        <Grid container spacing={3} sx={{ width: '100%', m: 0 }}>
+          <Grid item xs={12} md={6}>
+            <SurfacePanel sx={{ height: '100%' }}>
+              <Stack spacing={2}>
+                <Box>
+                  <Typography variant="h6">Input</Typography>
+                  <Typography variant="body2" color="text.secondary">Paste plain text to encrypt, or encrypted text to decrypt.</Typography>
+                </Box>
+                <TextField
+                  label="Input text"
+                  multiline
+                  minRows={8}
+                  fullWidth
+                  value={text}
+                  onChange={(event) => setText(event.target.value)}
+                />
+                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
+                  <TextField
+                    label="Encryption key"
+                    fullWidth
+                    value={key}
+                    onChange={(event) => setKey(event.target.value)}
+                  />
+                  <Button variant="outlined" onClick={() => setKey(generateRandomKey())}>
+                    Generate
+                  </Button>
+                </Stack>
+                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
+                  <Button variant="contained" onClick={handleEncrypt} disabled={processing}>Encrypt</Button>
+                  <Button variant="outlined" onClick={handleDecrypt} disabled={processing}>Decrypt</Button>
+                </Stack>
+              </Stack>
+            </SurfacePanel>
           </Grid>
           <Grid item xs={12} md={6}>
-            <Button variant="contained" onClick={handleEncrypt} fullWidth>
-              Encrypt
-            </Button>
-          </Grid>
-          <Grid item xs={12} md={6}>
-            <Button variant="contained" onClick={handleDecrypt} fullWidth>
-              Decrypt
-            </Button>
-          </Grid>
-          <Grid item xs={12}>
-            <Divider style={{ margin: '20px 0' }} />
-            <Typography variant="h6">Results</Typography>
-          </Grid>
-          <Grid item xs={12} md={6}>
-            <TextareaAutosize
-              placeholder="Encrypted Text"
-              value={encryptedText}
-              id="encryptedTextArea"
-              readOnly
-              style={{ width: '100%', height: '200px'}}
-            />
-            <Button
-              variant="outlined"
-              onClick={() => handleCopyToClipboard('encryptedTextArea')}
-              startIcon={<FileCopyIcon />}
-              style={{ margin: '10px 0' , border:'none'}}
-            >
-              
-            </Button>
-            <Button
-              variant="outlined"
-              onClick={() => handleDownload('encrypted_text.txt', encryptedText)}
-              style={{ margin: '10px 0' }}
-            >
-              Download Encrypted Text
-            </Button>
-          </Grid>
-          <Grid item xs={12} md={6}>
-            <TextareaAutosize
-              placeholder="Decrypted Text"
-              value={decryptedText}
-              id="decryptedTextArea"
-              readOnly
-              style={{ width: '100%', height:'200px' }}
-            />
-          <Grid item xs={12}>
-            {fullText.length > 20 && (
-              <>
-                <Typography variant="body2">
-                  {fullText.substring(0, 20)}
-                  <span style={{ cursor: 'pointer', color: 'blue' }} onClick={handleViewFull}>
-                    ...View Full
-                  </span>
-                </Typography>
-                <Modal open={showFullModal} onClose={handleCloseFullModal}>
-                  <Box
-                    sx={{
-                      position: 'absolute',
-                      top: '50%',
-                      left: '50%',
-                      transform: 'translate(-50%, -50%)',
-                      width: 400,
-                      maxHeight: '80vh',
-                      overflowY: 'auto',
-                      bgcolor: 'background.paper',
-                      border: '2px solid #000',
-                      boxShadow: 24,
-                      p: 4,
-                      whiteSpace: 'pre-wrap', // Maintain line breaks and spaces
-                    }}
-                  >
-                    <Typography variant="h6" component="h2" gutterBottom>
-                      Full Text
-                    </Typography>
-                    <Typography variant="body2" component="div">
-                      {fullText}
-                    </Typography>
-                  </Box>
-                </Modal>
-              </>
-            )}
-          </Grid>
-            <Button
-              variant="outlined"
-              onClick={() => handleCopyToClipboard('decryptedTextArea')}
-              startIcon={<FileCopyIcon />}
-              style={{ margin: '10px 0', border:'none' }}
-            >
-              
-            </Button>
-            <Button
-              variant="outlined"
-              onClick={() => handleDownload('decrypted_text.txt', decryptedText)}
-              style={{ margin: '10px 0',  }}
-            >
-              Download Decrypted Text
-            </Button>
+            <SurfacePanel sx={{ minHeight: 405 }}>
+              <Stack spacing={2}>
+                <Stack direction="row" spacing={1} alignItems="center" justifyContent="space-between">
+                  <Typography variant="h6">Output</Typography>
+                  <Chip size="small" label={encryptedText ? 'Encrypted' : decryptedText ? 'Decrypted' : 'Waiting'} />
+                </Stack>
+                <TextField
+                  multiline
+                  minRows={8}
+                  fullWidth
+                  value={outputValue}
+                  placeholder="Your result will appear here."
+                  InputProps={{ readOnly: true }}
+                />
+                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
+                  <Button startIcon={<ContentCopyIcon />} onClick={() => copy(outputValue)} disabled={!outputValue}>
+                    Copy
+                  </Button>
+                  <Button startIcon={<DownloadIcon />} onClick={() => download(outputFileName, outputValue)} disabled={!outputValue}>
+                    Download
+                  </Button>
+                  <Button startIcon={<SaveIcon />} onClick={handleCloudSave} disabled={saving || !encryptedText}>
+                    {saving ? 'Saving...' : 'Save'}
+                  </Button>
+                </Stack>
+              </Stack>
+            </SurfacePanel>
           </Grid>
         </Grid>
-        <Button onClick={handleCloudSave}>Cloud Save</Button>
-      </Paper>
-    </Container>
+      </Stack>
+    </PageShell>
   );
 };
 
 export default TextEncrypt;
-
-
-
-// import React, { useState } from 'react';
-// import { TextField, Button, TextareaAutosize, Divider, Typography, Paper, Grid, Container } from '@mui/material';
-// import FileCopyIcon from '@mui/icons-material/FileCopy';
-
-// const TextEncrypt = () => {
-//   const [text, setText] = useState('');
-//   const [key, setKey] = useState(generateRandomKey());
-//   const [encryptedText, setEncryptedText] = useState('');
-//   const [decryptedText, setDecryptedText] = useState('');
-
-//   function generateRandomKey(length = 16) {
-//     const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-//     let key = '';
-//     for (let i = 0; i < length; i++) {
-//       key += characters.charAt(Math.floor(Math.random() * characters.length));
-//     }
-//     return key;
-//   }
-
-//   const handleTextChange = (event) => {
-//     setText(event.target.value);
-//   };
-
-//   const handleKeyChange = (event) => {
-//     setKey(event.target.value);
-//   };
-
-//   const handleEncrypt = () => {
-//     const encrypted = encryptText(text, key);
-//     setEncryptedText(encrypted);
-//   };
-
-//   const handleDecrypt = () => {
-//     console.log(key);
-//     const decrypted = decryptText(text, key);
-//     console.log(decrypted);
-//     setDecryptedText("decrypted:",decrypted);
-//   };
-
-//   const handleCopyToClipboard = (textAreaId) => {
-//     const textArea = document.getElementById(textAreaId);
-//     textArea.select();
-//     document.execCommand('copy');
-//   };
-
-//   const encryptText = (plainText, encryptionKey) => {
-//     let encrypted = '';
-//     for (let i = 0; i < plainText.length; i++) {
-//       const charCode = plainText.charCodeAt(i);
-//       const keyChar = encryptionKey.charCodeAt(i % encryptionKey.length);
-//       const encryptedCharCode = (charCode + keyChar) % 256; // One-time pad
-//       encrypted += String.fromCharCode(encryptedCharCode);
-//     }
-//     console.log(encrypted);
-//     return btoa(encrypted); // Base64 encode for better representation
-//   };
-
-//   const decryptText = (cipherText, decryptionKey) => {
-//     console.log("cipher:", cipherText);
-//     const decodedCipherText = atob(cipherText);
-//     let decrypted = '';
-//     for (let i = 0; i < decodedCipherText.length; i++) {
-//       const charCode = decodedCipherText.charCodeAt(i);
-//       const keyChar = decryptionKey.charCodeAt(i % decryptionKey.length);
-//       const decryptedCharCode = (charCode - keyChar + 256) % 256; // One-time pad
-//       decrypted += String.fromCharCode(decryptedCharCode);
-//     }
-//     return decrypted;
-//   };
-
-//   return (
-//     <Container maxWidth="sm">
-//       <Paper elevation={3} style={{ padding: '20px', margin: '20px', textAlign: 'center' }}>
-//         <Typography variant="h4">Text Encryption & Decryption</Typography>
-//         <Divider style={{ margin: '20px 0' }} />
-//         <Grid container spacing={2} justifyContent="center">
-//           <Grid item xs={12}>
-//             <TextField
-//               label="Enter Text"
-//               variant="outlined"
-//               multiline
-//               rows={4}
-//               fullWidth
-//               value={text}
-//               onChange={handleTextChange}
-//             />
-//           </Grid>
-//           <Grid item xs={12}>
-//             <TextField
-//               label="Enter Encryption/Decryption Key"
-//               variant="outlined"
-//               fullWidth
-//               value={key}
-//               onChange={handleKeyChange}
-//             />
-//           </Grid>
-//           <Grid item xs={12} md={6}>
-//             <Button variant="contained" onClick={handleEncrypt} fullWidth>
-//               Encrypt
-//             </Button>
-//           </Grid>
-//           <Grid item xs={12} md={6}>
-//             <Button variant="contained" onClick={handleDecrypt} fullWidth>
-//               Decrypt
-//             </Button>
-//           </Grid>
-//           <Grid item xs={12}>
-//             <Divider style={{ margin: '20px 0' }} />
-//             <Typography variant="h6">Results</Typography>
-//           </Grid>
-//           <Grid item xs={12} md={6}>
-//             <TextareaAutosize
-//               placeholder="Encrypted Text"
-//               value={encryptedText}
-//               id="encryptedTextArea"
-//               readOnly
-//               style={{ width: '100%' }}
-//             />
-//             <Button
-//               variant="outlined"
-//               startIcon={<FileCopyIcon />}
-//               onClick={() => handleCopyToClipboard('encryptedTextArea')}
-//               style={{ marginTop: '10px' }}
-//             >
-//               Copy to Clipboard
-//             </Button>
-//           </Grid>
-//           <Grid item xs={12} md={6}>
-//             <TextareaAutosize
-//               placeholder="Decrypted Text"
-//               value={decryptedText}
-//               id="decryptedTextArea"
-//               readOnly
-//               style={{ width: '100%' }}
-//             />
-//             <Button
-//               variant="outlined"
-//               startIcon={<FileCopyIcon />}
-//               onClick={() => handleCopyToClipboard('decryptedTextArea')}
-//               style={{ marginTop: '10px' }}
-//             >
-//               Copy to Clipboard
-//             </Button>
-//           </Grid>
-//         </Grid>
-//       </Paper>
-//     </Container>
-//   );
-// };
-
-// export default TextEncrypt;

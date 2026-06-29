@@ -4,6 +4,7 @@ import VisibilityIcon from '@mui/icons-material/Visibility';
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import FileCopyIcon from '@mui/icons-material/FileCopy';
 import ImageIcon from '@mui/icons-material/Image';
+import api from '../../api/client';
 
 const ImageEncryptionDashboard = () => {
   const [imageEncryptions, setImageEncryptions] = useState([]);
@@ -11,9 +12,8 @@ const ImageEncryptionDashboard = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const response = await fetch(`https://rustbackend.onrender.com/api/rust/image/3`);
-        const data = await response.json();
-        setImageEncryptions(data);
+        const response = await api.get('/api/rust/image');
+        setImageEncryptions(response.data);
       } catch (error) {
         console.error('Error fetching image encryptions:', error);
       }
