@@ -129,10 +129,12 @@ const getSql = () => {
   }
   if (!pgPool) {
     const ca = process.env.DATABASE_CA_CERT || process.env.PGSSLROOTCERT;
-    const rejectUnauthorized = process.env.KRYPT_DB_SSL_REJECT_UNAUTHORIZED !== 'false';
+    const ssl = process.env.KRYPT_DB_SSL === 'false'
+      ? false
+      : { rejectUnauthorized: process.env.KRYPT_DB_SSL_REJECT_UNAUTHORIZED !== 'false', ...(ca ? { ca } : {}) };
     pgPool = new Pool({
       connectionString: databaseConnectionString(),
-      ssl: { rejectUnauthorized, ...(ca ? { ca } : {}) },
+      ssl,
       max: Number(process.env.KRYPT_DB_POOL_MAX || 5),
     });
   }

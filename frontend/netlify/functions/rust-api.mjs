@@ -25,6 +25,7 @@ const syncNetlifyEnv = () => {
     'RESEND_API_KEY',
     'FEEDBACK_FROM_EMAIL',
     'KRYPT_MAX_BODY_BYTES',
+    'KRYPT_DB_SSL',
     'KRYPT_DB_SSL_REJECT_UNAUTHORIZED',
     'DATABASE_CA_CERT',
     'PGSSLROOTCERT',
