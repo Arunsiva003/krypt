@@ -1,5 +1,17 @@
 {
   "buildCommand": "GENERATE_SOURCEMAP=false npm run build",
+  "redirects": [
+    {
+      "source": "/.env",
+      "destination": "/404",
+      "permanent": false
+    },
+    {
+      "source": "/.git/(.*)",
+      "destination": "/404",
+      "permanent": false
+    }
+  ],
   "rewrites": [
     {
       "source": "/static/js/(.*).map",
@@ -18,11 +30,7 @@
       "destination": "/404"
     },
     {
-      "source": "/api/(.*)",
-      "destination": "/api/$1"
-    },
-    {
-      "source": "/(.*)",
+      "source": "/((?!api/).*)",
       "destination": "/index.html"
     }
   ],

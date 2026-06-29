@@ -1,1 +1,6 @@
+/.env              /404          404!
+/.env/*            /404          404!
+/.git/*            /404          404!
+/static/js/*.map   /404          404!
+/static/css/*.map  /404          404!
 /*    /index.html    200
