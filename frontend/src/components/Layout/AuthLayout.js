@@ -28,10 +28,10 @@ const AuthLayout = ({ children, title, subtitle }) => (
       bgcolor: 'background.default',
     }}
   >
-    <Container maxWidth="lg" sx={{ display: 'flex', alignItems: 'center', py: { xs: 4, md: 6 } }}>
+    <Container maxWidth="lg" sx={{ display: 'flex', alignItems: 'center', py: { xs: 2, md: 6 } }}>
       <Grid container spacing={{ xs: 3, md: 6 }} alignItems="center">
-        <Grid item xs={12} md={6}>
-          <Stack spacing={4}>
+        <Grid item xs={12} md={6} sx={{ order: { xs: 2, md: 1 } }}>
+          <Stack spacing={{ xs: 2.5, md: 4 }}>
             <Stack spacing={2}>
               <Stack direction="row" spacing={1.25} alignItems="center">
                 <Box
@@ -53,17 +53,17 @@ const AuthLayout = ({ children, title, subtitle }) => (
                 variant="h2"
                 component="h1"
                 sx={{
-                  fontSize: { xs: 42, md: 62 },
+                  fontSize: { xs: 32, sm: 42, md: 62 },
                   maxWidth: 620,
                 }}
               >
                 A sharper workspace for encryption workflows.
               </Typography>
-              <Typography color="text.secondary" sx={{ fontSize: 18, lineHeight: 1.7, maxWidth: 560 }}>
+              <Typography color="text.secondary" sx={{ fontSize: { xs: 15, md: 18 }, lineHeight: 1.7, maxWidth: 560 }}>
                 Work with encrypted text, transformed images, and steganography history from a clean interface that keeps sensitive keys out of storage.
               </Typography>
             </Stack>
-            <Grid container spacing={1.5}>
+            <Grid container spacing={1.5} sx={{ display: { xs: 'none', sm: 'flex' } }}>
               {proofPoints.map((item) => (
                 <Grid item xs={12} sm={4} key={item.label}>
                   <Paper
@@ -89,13 +89,13 @@ const AuthLayout = ({ children, title, subtitle }) => (
             </Grid>
           </Stack>
         </Grid>
-        <Grid item xs={12} md={6}>
+        <Grid item xs={12} md={6} sx={{ order: { xs: 1, md: 2 } }}>
           <Paper
             elevation={0}
             sx={{
-              p: { xs: 3, md: 4 },
-              borderRadius: 3,
-              boxShadow: 6,
+              p: { xs: 2.25, sm: 3, md: 4 },
+              borderRadius: { xs: 2, md: 3 },
+              boxShadow: { xs: 3, md: 6 },
             }}
           >
             <Stack spacing={1} sx={{ mb: 3 }}>

@@ -26,8 +26,10 @@ export const readStoredAuth = () => {
     const stored = localStorage.getItem(AUTH_STORAGE_KEY);
     const legacy = localStorage.getItem('krypt_auth');
     if (legacy) localStorage.removeItem('krypt_auth');
-    const user = stored ? JSON.parse(stored) : null;
-    return user ? { user } : null;
+    const parsed = stored ? JSON.parse(stored) : null;
+    if (!parsed) return null;
+    if (parsed.user) return { user: parsed.user, token: parsed.token };
+    return { user: parsed };
   } catch {
     localStorage.removeItem(AUTH_STORAGE_KEY);
     return null;
@@ -36,7 +38,10 @@ export const readStoredAuth = () => {
 
 export const writeStoredAuth = (auth) => {
   if (auth?.user) {
-    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(auth.user));
+    const storedAuth = isMockerEnabled() && auth.token
+      ? { user: auth.user, token: auth.token }
+      : auth.user;
+    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(storedAuth));
     localStorage.removeItem('user');
     localStorage.removeItem('krypt_auth');
   } else {

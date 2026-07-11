@@ -24,7 +24,7 @@ const Banner = () => {
       component="section"
       sx={{
         color: '#f8fafc',
-        py: { xs: 5, md: 7 },
+        py: { xs: 3.5, md: 7 },
         bgcolor: '#0b1f2a',
         borderBottom: '1px solid rgba(255,255,255,0.08)',
       }}
@@ -45,7 +45,7 @@ const Banner = () => {
                 variant="h1"
                 component="h1"
                 sx={{
-                  fontSize: { xs: 42, sm: 54, md: 72 },
+                  fontSize: { xs: 38, sm: 54, md: 72 },
                   maxWidth: 840,
                 }}
               >
@@ -54,7 +54,7 @@ const Banner = () => {
                   real work.
                 </Box>
               </Typography>
-              <Typography sx={{ color: 'rgba(241,245,249,0.78)', lineHeight: 1.75, fontSize: { xs: 17, md: 19 }, maxWidth: 680 }}>
+              <Typography sx={{ color: 'rgba(241,245,249,0.78)', lineHeight: 1.7, fontSize: { xs: 16, md: 19 }, maxWidth: 680 }}>
                 Encrypt text, transform images, hide messages, and review saved artifacts in one focused product surface.
               </Typography>
               <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
@@ -76,7 +76,7 @@ const Banner = () => {
             <Paper
               elevation={0}
               sx={{
-                p: { xs: 2.5, md: 3 },
+                p: { xs: 2, md: 3 },
                 bgcolor: 'rgba(255,255,255,0.08)',
                 borderColor: 'rgba(255,255,255,0.16)',
                 backdropFilter: 'blur(18px)',
@@ -142,8 +142,8 @@ const Banner = () => {
                     <Grid item xs={4} key={metric.label}>
                       <Box
                         sx={{
-                          p: 1.5,
-                          minHeight: 104,
+                          p: { xs: 1.2, md: 1.5 },
+                          minHeight: { xs: 86, md: 104 },
                           borderRadius: 2,
                           bgcolor: alpha('#ffffff', 0.08),
                           border: '1px solid rgba(255,255,255,0.12)',

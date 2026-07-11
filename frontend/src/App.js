@@ -1,5 +1,6 @@
 import React, { useContext, useEffect } from 'react';
 import { BrowserRouter as Router, Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import './App.css';
 import Login from './pages/Login/login'
 import SignUp from './pages/SignUp/SignUp';
 import Landing from './pages/Landing/Landing';
@@ -13,10 +14,19 @@ import ProfileComponent from './pages/Profile/Profile';
 import Encryptions from './components/Encryptions/Encryptions';
 import { ThemeModeProvider } from './components/ThemeModeProvider';
 import Suggestions from './pages/Suggestions/Suggestions';
+import Analytics from './pages/Analytics/Analytics';
+import { trackEvent } from './analytics';
+import { isOwnerUser } from './adminAccess';
 
 const ProtectedRoute = ({ children }) => {
   const { isAuthenticated } = useContext(UserContext);
   return isAuthenticated ? children : <Navigate to="/" replace />;
+};
+
+const OwnerRoute = ({ children }) => {
+  const { isAuthenticated, user } = useContext(UserContext);
+  if (!isAuthenticated) return <Navigate to="/" replace />;
+  return isOwnerUser(user) ? children : <Navigate to="/home" replace />;
 };
 
 const PublicOnlyRoute = ({ children }) => {
@@ -35,11 +45,26 @@ const ScrollToTop = () => {
   return null;
 };
 
+const AnalyticsTracker = () => {
+  const { hash, pathname } = useLocation();
+
+  useEffect(() => {
+    trackEvent('page_view', {
+      eventGroup: 'navigation',
+      path: pathname,
+      metadata: hash ? { anchor: hash.replace('#', '') } : {},
+    });
+  }, [hash, pathname]);
+
+  return null;
+};
+
 function App() {
   return (
     <ThemeModeProvider>
       <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <ScrollToTop />
+        <AnalyticsTracker />
         <AppFrame />
       </Router>
     </ThemeModeProvider>
@@ -55,7 +80,7 @@ const AppFrame = () => {
   return (
     <div className='App'>
       {showWorkspaceNav ? <Navbar /> : null}
-      <div className='content'>
+      <div className={showWorkspaceNav ? 'content with-workspace-nav' : 'content'}>
         <Routes>
           <Route path='/' element={isAuthenticated ? <Navigate to="/home" replace /> : <Landing />} />
           <Route path='/login' element={<PublicOnlyRoute><Login /></PublicOnlyRoute>} />
@@ -65,7 +90,8 @@ const AppFrame = () => {
           <Route path='/krypt/:name' element={<ProtectedRoute><Krypt /></ProtectedRoute>} />
           <Route path='/imagek' element={<ProtectedRoute><ImageEncrypt /></ProtectedRoute>} />
           <Route path='/profile' element={<ProtectedRoute><ProfileComponent /></ProtectedRoute>} />
-          <Route path='/suggestions' element={<ProtectedRoute><Suggestions /></ProtectedRoute>} />
+          <Route path='/suggestions' element={<OwnerRoute><Suggestions /></OwnerRoute>} />
+          <Route path='/analytics' element={<OwnerRoute><Analytics /></OwnerRoute>} />
           <Route path='/encryptions' element={<ProtectedRoute><Encryptions /></ProtectedRoute>} />
           <Route path='/dashboard' element={<ProtectedRoute><Encryptions /></ProtectedRoute>} />
           <Route path='*' element={<Navigate to={isAuthenticated ? '/home' : '/'} replace />} />

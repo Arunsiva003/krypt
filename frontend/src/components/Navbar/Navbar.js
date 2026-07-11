@@ -5,11 +5,14 @@ import {
   Avatar,
   Box,
   Button,
+  BottomNavigation,
+  BottomNavigationAction,
   Container,
   Divider,
   IconButton,
   Menu,
   MenuItem,
+  Paper,
   Stack,
   Toolbar,
   Tooltip,
@@ -22,6 +25,7 @@ import BuildOutlinedIcon from '@mui/icons-material/BuildOutlined';
 import LogoutOutlinedIcon from '@mui/icons-material/LogoutOutlined';
 import PersonOutlineOutlinedIcon from '@mui/icons-material/PersonOutlineOutlined';
 import FeedbackOutlinedIcon from '@mui/icons-material/FeedbackOutlined';
+import InsightsOutlinedIcon from '@mui/icons-material/InsightsOutlined';
 import UserContext from '../../UserContext';
 import { isOwnerUser } from '../../adminAccess';
 import BrandMark from '../BrandMark';
@@ -41,8 +45,20 @@ function Navbar() {
   const navigate = useNavigate();
   const location = useLocation();
   const navPages = isOwnerUser(user)
-    ? [...pages, { label: 'Suggestions', path: '/suggestions', icon: <FeedbackOutlinedIcon fontSize="small" /> }]
+    ? [
+        ...pages,
+        { label: 'Analytics', path: '/analytics', icon: <InsightsOutlinedIcon fontSize="small" /> },
+        { label: 'Suggestions', path: '/suggestions', icon: <FeedbackOutlinedIcon fontSize="small" /> },
+      ]
     : pages;
+  const mobileNavPages = isOwnerUser(user)
+    ? [
+        pages[0],
+        pages[1],
+        pages[3],
+        { label: 'Analytics', path: '/analytics', icon: <InsightsOutlinedIcon fontSize="small" /> },
+      ]
+    : [pages[0], pages[1], pages[3]];
 
   const goTo = (path) => {
     setAnchorElNav(null);
@@ -69,20 +85,21 @@ function Navbar() {
   const initials = user?.username?.slice(0, 1)?.toUpperCase() || 'K';
 
   return (
-    <AppBar
-      position="sticky"
-      elevation={0}
-      sx={{
-        top: 0,
-        bgcolor: (theme) => theme.palette.mode === 'dark' ? 'rgba(6, 11, 18, 0.9)' : 'rgba(249, 251, 255, 0.9)',
-        backdropFilter: 'blur(18px)',
-        color: 'text.primary',
-        borderBottom: '1px solid',
-        borderColor: 'divider',
-      }}
-    >
-      <Container maxWidth="xl">
-        <Toolbar disableGutters sx={{ minHeight: { xs: 64, md: 72 } }}>
+    <>
+      <AppBar
+        position="sticky"
+        elevation={0}
+        sx={{
+          top: 0,
+          bgcolor: (theme) => theme.palette.mode === 'dark' ? 'rgba(6, 11, 18, 0.9)' : 'rgba(249, 251, 255, 0.9)',
+          backdropFilter: 'blur(18px)',
+          color: 'text.primary',
+          borderBottom: '1px solid',
+          borderColor: 'divider',
+        }}
+      >
+        <Container maxWidth="xl">
+          <Toolbar disableGutters sx={{ minHeight: { xs: 64, md: 72 } }}>
           <Stack
             direction="row"
             alignItems="center"
@@ -184,12 +201,20 @@ function Navbar() {
                 </Stack>
               </MenuItem>
               {isOwnerUser(user) ? (
-                <MenuItem onClick={() => handleUserAction('/suggestions')}>
-                  <Stack direction="row" spacing={1.2} alignItems="center">
-                    <FeedbackOutlinedIcon fontSize="small" />
-                    <Typography>Suggestions</Typography>
-                  </Stack>
-                </MenuItem>
+                <>
+                  <MenuItem onClick={() => handleUserAction('/analytics')}>
+                    <Stack direction="row" spacing={1.2} alignItems="center">
+                      <InsightsOutlinedIcon fontSize="small" />
+                      <Typography>Analytics</Typography>
+                    </Stack>
+                  </MenuItem>
+                  <MenuItem onClick={() => handleUserAction('/suggestions')}>
+                    <Stack direction="row" spacing={1.2} alignItems="center">
+                      <FeedbackOutlinedIcon fontSize="small" />
+                      <Typography>Suggestions</Typography>
+                    </Stack>
+                  </MenuItem>
+                </>
               ) : null}
               <Divider />
               <MenuItem onClick={() => handleUserAction('logout')}>
@@ -200,9 +225,45 @@ function Navbar() {
               </MenuItem>
             </Menu>
           </Stack>
-        </Toolbar>
-      </Container>
-    </AppBar>
+          </Toolbar>
+        </Container>
+      </AppBar>
+      <Paper
+        elevation={6}
+        sx={{
+          display: { xs: 'block', md: 'none' },
+          position: 'fixed',
+          left: 12,
+          right: 12,
+          bottom: 12,
+          zIndex: (theme) => theme.zIndex.appBar,
+          borderRadius: 2,
+          overflow: 'hidden',
+          bgcolor: 'background.paper',
+        }}
+      >
+        <BottomNavigation
+          showLabels
+          value={mobileNavPages.some((page) => page.path === location.pathname) ? location.pathname : false}
+          onChange={(event, value) => goTo(value)}
+          sx={{
+            height: 64,
+            '& .MuiBottomNavigationAction-root': {
+              minWidth: 0,
+              px: 0.5,
+            },
+            '& .MuiBottomNavigationAction-label': {
+              fontSize: 11,
+              fontWeight: 750,
+            },
+          }}
+        >
+          {mobileNavPages.map((page) => (
+            <BottomNavigationAction key={page.label} label={page.label} value={page.path} icon={page.icon} />
+          ))}
+        </BottomNavigation>
+      </Paper>
+    </>
   );
 }
 

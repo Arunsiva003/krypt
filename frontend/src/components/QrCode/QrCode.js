@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import QRCode from 'qrcode.react';
-import { Alert, Box, Button, Grid, Stack, TextField, Typography } from '@mui/material';
+import { Alert, Box, Button, Chip, Stack, TextField, Typography } from '@mui/material';
 import QrCode2OutlinedIcon from '@mui/icons-material/QrCode2Outlined';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
+import { trackToolAction } from '../../analytics';
 import { decryptTextPackage, encryptTextPackage } from '../../cryptoUtils';
+import useMobileResultReveal from '../../hooks/useMobileResultReveal';
 import PageShell from '../Layout/PageShell';
 import SectionHeader from '../Layout/SectionHeader';
 import SurfacePanel from '../Layout/SurfacePanel';
@@ -16,6 +18,8 @@ const QRCodeComponent = () => {
   const [decryptedMessage, setDecryptedMessage] = useState('');
   const [processing, setProcessing] = useState(false);
   const { notify } = useFeedback();
+  const { resultRef, revealResult } = useMobileResultReveal();
+  const resultReady = Boolean(encryptedMessage || decryptedMessage);
 
   const encryptMessage = async () => {
     if (!message.trim() || !secretKey.trim()) {
@@ -28,7 +32,9 @@ const QRCodeComponent = () => {
       const encrypted = await encryptTextPackage(message, secretKey, { tool: 'qr-encryption' });
       setEncryptedMessage(JSON.stringify(encrypted));
       setDecryptedMessage('');
+      trackToolAction('qr-encryption', 'generate');
       notify('Encrypted QR payload generated with AES-GCM.', 'success');
+      revealResult();
     } catch {
       notify('Unable to encrypt this QR payload.', 'error');
     } finally {
@@ -47,7 +53,9 @@ const QRCodeComponent = () => {
       const decrypted = await decryptTextPackage(JSON.parse(message), secretKey);
       setDecryptedMessage(decrypted);
       setEncryptedMessage('');
+      trackToolAction('qr-encryption', 'decrypt');
       notify('Payload decrypted.', 'success');
+      revealResult();
     } catch {
       setDecryptedMessage('');
       notify('Unable to decrypt this AES-GCM payload with this key.', 'warning');
@@ -67,8 +75,15 @@ const QRCodeComponent = () => {
         <Alert severity="info" sx={{ borderRadius: 2 }}>
           QR payloads are generated locally and are not saved to history.
         </Alert>
-        <Grid container spacing={3} sx={{ width: '100%', m: 0 }}>
-          <Grid item xs={12} md={6}>
+        <Box
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: { xs: '1fr', md: 'repeat(2, minmax(0, 1fr))' },
+            gap: { xs: 2, md: 3 },
+            alignItems: 'stretch',
+          }}
+        >
+          <Box>
             <SurfacePanel sx={{ height: '100%' }}>
               <Stack spacing={2}>
                 <Typography variant="h6">Payload setup</Typography>
@@ -97,11 +112,14 @@ const QRCodeComponent = () => {
                 </Stack>
               </Stack>
             </SurfacePanel>
-          </Grid>
-          <Grid item xs={12} md={6}>
+          </Box>
+          <Box ref={resultRef} sx={{ scrollMarginTop: { xs: 2, md: 0 } }} role="region" aria-label="QR encryption result">
             <SurfacePanel sx={{ minHeight: 430 }}>
               <Stack spacing={2}>
-                <Typography variant="h6">Result</Typography>
+                <Stack direction="row" spacing={1} alignItems="center" justifyContent="space-between">
+                  <Typography variant="h6">Result</Typography>
+                  <Chip size="small" label={resultReady ? 'Ready' : 'Waiting'} color={resultReady ? 'success' : 'default'} />
+                </Stack>
                 {encryptedMessage ? (
                   <Box
                     sx={{
@@ -131,14 +149,14 @@ const QRCodeComponent = () => {
                       px: 3,
                     }}
                   >
-                    Generate an encrypted QR code to preview it here.
+                    Generate an encrypted QR code or decrypt a payload to preview the result here.
                   </Box>
                 )}
                 {decryptedMessage ? <Alert severity="success">{decryptedMessage}</Alert> : null}
               </Stack>
             </SurfacePanel>
-          </Grid>
-        </Grid>
+          </Box>
+        </Box>
       </Stack>
     </PageShell>
   );

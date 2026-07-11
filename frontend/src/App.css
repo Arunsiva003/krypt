@@ -6,6 +6,12 @@
   min-height: 100vh;
 }
 
+@media (max-width: 899.95px) {
+  .content.with-workspace-nav {
+    padding-bottom: 92px;
+  }
+}
+
 a {
   color: inherit;
 }

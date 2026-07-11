@@ -22,11 +22,11 @@ const SectionHeader = ({ eyebrow, title, description, action, align = 'left', sx
       alignItems={{ xs: align === 'center' ? 'center' : 'flex-start', md: 'flex-end' }}
     >
       <Box maxWidth={760}>
-        <Typography variant="h4" component="h1">
+        <Typography variant="h4" component="h1" sx={{ fontSize: { xs: 30, sm: 34, md: 38 }, lineHeight: 1.12 }}>
           {title}
         </Typography>
         {description ? (
-          <Typography color="text.secondary" sx={{ mt: 1, fontSize: 16, lineHeight: 1.65 }}>
+          <Typography color="text.secondary" sx={{ mt: 1, fontSize: { xs: 15, md: 16 }, lineHeight: 1.65 }}>
             {description}
           </Typography>
         ) : null}

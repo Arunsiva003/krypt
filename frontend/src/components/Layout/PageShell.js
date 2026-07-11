@@ -6,7 +6,7 @@ const PageShell = ({ children, maxWidth = 'lg', sx = {} }) => (
     component="main"
     sx={{
       minHeight: 'calc(100vh - 72px)',
-      py: { xs: 3, md: 5 },
+      py: { xs: 2.5, md: 5 },
       ...sx,
     }}
   >

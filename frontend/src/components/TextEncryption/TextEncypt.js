@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
-import { Alert, Box, Button, Chip, Grid, Stack, TextField, Typography } from '@mui/material';
+import { Alert, Box, Button, Chip, Stack, TextField, Typography } from '@mui/material';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import DownloadIcon from '@mui/icons-material/Download';
 import SaveIcon from '@mui/icons-material/Save';
 import api from '../../api/client';
+import { trackToolAction } from '../../analytics';
 import { decryptTextPackage, encryptTextPackage, randomBase64 } from '../../cryptoUtils';
 import { useFeedback } from '../Feedback/FeedbackProvider';
+import useMobileResultReveal from '../../hooks/useMobileResultReveal';
 import PageShell from '../Layout/PageShell';
 import SectionHeader from '../Layout/SectionHeader';
 import SurfacePanel from '../Layout/SurfacePanel';
@@ -20,7 +22,9 @@ const TextEncrypt = () => {
   const [processing, setProcessing] = useState(false);
   const [saving, setSaving] = useState(false);
   const { notify } = useFeedback();
+  const { resultRef, revealResult } = useMobileResultReveal();
   const outputValue = encryptedText || decryptedText;
+  const outputReady = Boolean(outputValue);
   const outputFileName = encryptedText ? 'encrypted_text.krypt.json' : 'decrypted_text.txt';
 
   const handleEncrypt = async () => {
@@ -33,7 +37,9 @@ const TextEncrypt = () => {
       const encrypted = await encryptTextPackage(text, key, { tool: 'text-encryption' });
       setEncryptedText(JSON.stringify(encrypted, null, 2));
       setDecryptedText('');
+      trackToolAction('text-encryption', 'encrypt');
       notify('Text encrypted with AES-GCM. Keep your key safe; Krypt does not store it.', 'success');
+      revealResult();
     } catch {
       notify('Unable to encrypt this text in your browser.', 'error');
     } finally {
@@ -51,7 +57,9 @@ const TextEncrypt = () => {
       const pkg = JSON.parse(text);
       setDecryptedText(await decryptTextPackage(pkg, key));
       setEncryptedText('');
+      trackToolAction('text-encryption', 'decrypt');
       notify('Text decrypted.', 'success');
+      revealResult();
     } catch {
       notify('Unable to decrypt this AES-GCM package with the provided key.', 'error');
     } finally {
@@ -62,6 +70,7 @@ const TextEncrypt = () => {
   const copy = async (value) => {
     if (!value) return;
     await navigator.clipboard.writeText(value);
+    trackToolAction('text-encryption', 'copy');
     notify('Copied to clipboard.', 'success');
   };
 
@@ -72,6 +81,7 @@ const TextEncrypt = () => {
     link.href = URL.createObjectURL(blob);
     link.download = fileName;
     link.click();
+    trackToolAction('text-encryption', 'download');
   };
 
   const handleCloudSave = async () => {
@@ -82,6 +92,7 @@ const TextEncrypt = () => {
     try {
       setSaving(true);
       await api.post('/api/rust/text', { encrypted_text: encryptedText });
+      trackToolAction('text-encryption', 'save');
       notify('Encrypted text saved. The key was not stored.', 'success');
     } catch (err) {
       notify(err.response?.data?.error || 'Unable to save encrypted text.', 'error');
@@ -102,8 +113,15 @@ const TextEncrypt = () => {
         <Alert severity="info" sx={{ borderRadius: 2 }}>
           Krypt encrypts with AES-GCM in your browser and saves encrypted output only. Your key is never persisted.
         </Alert>
-        <Grid container spacing={3} sx={{ width: '100%', m: 0 }}>
-          <Grid item xs={12} md={6}>
+        <Box
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: { xs: '1fr', md: 'repeat(2, minmax(0, 1fr))' },
+            gap: { xs: 2, md: 3 },
+            alignItems: 'stretch',
+          }}
+        >
+          <Box>
             <SurfacePanel sx={{ height: '100%' }}>
               <Stack spacing={2}>
                 <Box>
@@ -135,13 +153,13 @@ const TextEncrypt = () => {
                 </Stack>
               </Stack>
             </SurfacePanel>
-          </Grid>
-          <Grid item xs={12} md={6}>
+          </Box>
+          <Box ref={resultRef} sx={{ scrollMarginTop: { xs: 2, md: 0 } }} role="region" aria-label="Text encryption output">
             <SurfacePanel sx={{ minHeight: 405 }}>
               <Stack spacing={2}>
                 <Stack direction="row" spacing={1} alignItems="center" justifyContent="space-between">
                   <Typography variant="h6">Output</Typography>
-                  <Chip size="small" label={encryptedText ? 'Encrypted' : decryptedText ? 'Decrypted' : 'Waiting'} />
+                  <Chip size="small" label={encryptedText ? 'Encrypted' : decryptedText ? 'Decrypted' : 'Waiting'} color={outputReady ? 'success' : 'default'} />
                 </Stack>
                 <TextField
                   multiline
@@ -164,8 +182,8 @@ const TextEncrypt = () => {
                 </Stack>
               </Stack>
             </SurfacePanel>
-          </Grid>
-        </Grid>
+          </Box>
+        </Box>
       </Stack>
     </PageShell>
   );

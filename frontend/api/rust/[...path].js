@@ -10,12 +10,15 @@ const MAX_TEXT_BYTES = 200 * 1024;
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
 const MAX_NOTE_BYTES = 1024 * 1024;
 const MAX_FEEDBACK_BYTES = 5000;
+const MAX_ANALYTICS_METADATA_BYTES = 2000;
 const SCRYPT_PARAMS = { N: 16384, r: 8, p: 1, maxmem: 64 * 1024 * 1024 };
 const RATE_LIMITS = {
   auth: { windowMs: 15 * 60 * 1000, max: 20 },
+  analytics: { windowMs: 60 * 1000, max: 120 },
   feedback: { windowMs: 60 * 60 * 1000, max: 12 },
   write: { windowMs: 60 * 1000, max: 60 },
 };
+const ANALYTICS_BLOCKED_METADATA_KEY = /(cipher|content|credential|email|file|image|key|message|note|password|payload|plain|secret|text|token)/i;
 
 let pgPool;
 let sqlClient;
@@ -246,11 +249,26 @@ const ensureSchema = async () => {
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )
     `;
+    await sql`
+      CREATE TABLE IF NOT EXISTS analytics_events (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        event_name TEXT NOT NULL,
+        event_group TEXT NOT NULL DEFAULT 'app',
+        path TEXT,
+        tool TEXT,
+        metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `;
     await sql`CREATE INDEX IF NOT EXISTS text_to_text_user_id_idx ON text_to_text (user_id)`;
     await sql`CREATE INDEX IF NOT EXISTS image_to_image_user_id_idx ON image_to_image (user_id)`;
     await sql`CREATE INDEX IF NOT EXISTS text_to_image_user_id_idx ON text_to_image (user_id)`;
     await sql`CREATE INDEX IF NOT EXISTS secure_notes_user_id_idx ON secure_notes (user_id)`;
     await sql`CREATE INDEX IF NOT EXISTS feedback_submissions_created_at_idx ON feedback_submissions (created_at DESC)`;
+    await sql`CREATE INDEX IF NOT EXISTS analytics_events_created_at_idx ON analytics_events (created_at DESC)`;
+    await sql`CREATE INDEX IF NOT EXISTS analytics_events_user_id_idx ON analytics_events (user_id)`;
+    await sql`CREATE INDEX IF NOT EXISTS analytics_events_name_idx ON analytics_events (event_name)`;
   })();
   return schemaReady;
 };
@@ -353,6 +371,18 @@ const authenticate = async (req) => {
   return rows[0];
 };
 
+const optionalAuthenticate = async (req) => {
+  const authorization = req.headers.authorization || '';
+  const token = cookieValue(req, 'krypt_session') || authorization.replace(/^Bearer\s+/i, '');
+  if (!token) return null;
+  try {
+    return await authenticate(req);
+  } catch (error) {
+    if (error.status && error.status < 500) return null;
+    throw error;
+  }
+};
+
 const hashPassword = (password) => {
   const salt = crypto.randomBytes(16).toString('base64url');
   const hash = crypto.scryptSync(password, salt, 64, SCRYPT_PARAMS).toString('base64url');
@@ -409,6 +439,71 @@ const requireOwner = (user) => {
     throw Object.assign(new Error('Owner access required'), { status: 403 });
   }
 };
+
+const analyticsLabel = (value, fallback = 'event', maxLength = 80) => {
+  const text = String(value || '').trim().slice(0, maxLength);
+  if (!text) return fallback;
+  return text.replace(/[^a-zA-Z0-9_.:-]/g, '_');
+};
+
+const analyticsPath = (value) => {
+  const text = String(value || '').trim();
+  if (!text) return null;
+  const normalized = text.startsWith('/') ? text : `/${text}`;
+  return normalized.slice(0, 160);
+};
+
+const sanitizeAnalyticsMetadata = (metadata) => {
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return {};
+  const clean = {};
+  Object.entries(metadata).slice(0, 20).forEach(([key, value]) => {
+    const safeKey = String(key || '').trim().replace(/[^a-zA-Z0-9_.:-]/g, '_').slice(0, 50);
+    if (!safeKey || ANALYTICS_BLOCKED_METADATA_KEY.test(safeKey)) return;
+    if (typeof value === 'boolean') {
+      clean[safeKey] = value;
+      return;
+    }
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      clean[safeKey] = value;
+      return;
+    }
+    if (typeof value === 'string') {
+      const safeValue = value.trim().slice(0, 120);
+      if (safeValue) clean[safeKey] = safeValue;
+    }
+  });
+  return byteLength(JSON.stringify(clean)) > MAX_ANALYTICS_METADATA_BYTES ? {} : clean;
+};
+
+const recordAnalyticsEvent = async ({
+  userId = null,
+  eventName,
+  eventGroup = 'app',
+  path = null,
+  tool = null,
+  metadata = {},
+}) => {
+  try {
+    await getSql()`
+      INSERT INTO analytics_events (user_id, event_name, event_group, path, tool, metadata)
+      VALUES (
+        ${userId ? Number(userId) : null},
+        ${analyticsLabel(eventName)},
+        ${analyticsLabel(eventGroup, 'app', 40)},
+        ${analyticsPath(path)},
+        ${tool ? analyticsLabel(tool, 'tool', 80) : null},
+        ${JSON.stringify(sanitizeAnalyticsMetadata(metadata))}::jsonb
+      )
+    `;
+  } catch (error) {
+    console.error('Analytics event failed', {
+      code: error.code || error.name || 'unknown_error',
+      event: String(eventName || 'unknown').slice(0, 80),
+    });
+  }
+};
+
+const countFrom = (rows) => Number(rows?.[0]?.count || 0);
 
 const listEncryption = async (bucket, user) => {
   const sql = getSql();
@@ -480,6 +575,165 @@ const sendFeedbackEmail = async (record) => {
   });
 };
 
+const handleAnalytics = async (req, path, body) => {
+  if (!path.startsWith('/analytics')) return null;
+  const sql = getSql();
+
+  if (req.method === 'POST' && path === '/analytics/events') {
+    checkRateLimit(req, 'analytics');
+    const user = await optionalAuthenticate(req);
+    await recordAnalyticsEvent({
+      userId: user?.id,
+      eventName: body.event_name,
+      eventGroup: body.event_group || 'app',
+      path: body.path,
+      tool: body.tool,
+      metadata: body.metadata,
+    });
+    return { status: 'recorded' };
+  }
+
+  if (req.method === 'GET' && path === '/analytics/summary') {
+    const user = await authenticate(req);
+    requireOwner(user);
+
+    const [
+      users,
+      totalEvents,
+      eventsToday,
+      eventsLast7Days,
+      feedback,
+      savedText,
+      savedImages,
+      savedTextImages,
+      notes,
+      activeToday,
+      activeLast7Days,
+      loginsToday,
+      loginsLast7Days,
+      loginsAll,
+      signupsToday,
+      signupsLast7Days,
+      signupsAll,
+      eventBreakdown,
+      toolBreakdown,
+      deviceBreakdown,
+      dailyEvents,
+      recentEvents,
+    ] = await Promise.all([
+      sql`SELECT COUNT(*)::INT AS count FROM users`,
+      sql`SELECT COUNT(*)::INT AS count FROM analytics_events`,
+      sql`SELECT COUNT(*)::INT AS count FROM analytics_events WHERE created_at >= CURRENT_DATE`,
+      sql`SELECT COUNT(*)::INT AS count FROM analytics_events WHERE created_at >= NOW() - INTERVAL '7 days'`,
+      sql`SELECT COUNT(*)::INT AS count FROM feedback_submissions`,
+      sql`SELECT COUNT(*)::INT AS count FROM text_to_text`,
+      sql`SELECT COUNT(*)::INT AS count FROM image_to_image`,
+      sql`SELECT COUNT(*)::INT AS count FROM text_to_image`,
+      sql`SELECT COUNT(*)::INT AS count FROM secure_notes`,
+      sql`SELECT COUNT(DISTINCT user_id)::INT AS count FROM analytics_events WHERE user_id IS NOT NULL AND created_at >= CURRENT_DATE`,
+      sql`SELECT COUNT(DISTINCT user_id)::INT AS count FROM analytics_events WHERE user_id IS NOT NULL AND created_at >= NOW() - INTERVAL '7 days'`,
+      sql`SELECT COUNT(*)::INT AS count FROM analytics_events WHERE event_name IN ('login', 'google_login') AND created_at >= CURRENT_DATE`,
+      sql`SELECT COUNT(*)::INT AS count FROM analytics_events WHERE event_name IN ('login', 'google_login') AND created_at >= NOW() - INTERVAL '7 days'`,
+      sql`SELECT COUNT(*)::INT AS count FROM analytics_events WHERE event_name IN ('login', 'google_login')`,
+      sql`SELECT COUNT(*)::INT AS count FROM analytics_events WHERE event_name IN ('signup', 'google_signup') AND created_at >= CURRENT_DATE`,
+      sql`SELECT COUNT(*)::INT AS count FROM analytics_events WHERE event_name IN ('signup', 'google_signup') AND created_at >= NOW() - INTERVAL '7 days'`,
+      sql`SELECT COUNT(*)::INT AS count FROM analytics_events WHERE event_name IN ('signup', 'google_signup')`,
+      sql`
+        SELECT event_name, COUNT(*)::INT AS count
+        FROM analytics_events
+        WHERE created_at >= NOW() - INTERVAL '7 days'
+        GROUP BY event_name
+        ORDER BY count DESC, event_name ASC
+        LIMIT 12
+      `,
+      sql`
+        SELECT tool, COUNT(*)::INT AS count
+        FROM analytics_events
+        WHERE tool IS NOT NULL AND created_at >= NOW() - INTERVAL '7 days'
+        GROUP BY tool
+        ORDER BY count DESC, tool ASC
+        LIMIT 12
+      `,
+      sql`
+        SELECT COALESCE(metadata->>'device_type', 'unknown') AS device_type, COUNT(*)::INT AS count
+        FROM analytics_events
+        WHERE created_at >= NOW() - INTERVAL '7 days'
+        GROUP BY device_type
+        ORDER BY count DESC, device_type ASC
+      `,
+      sql`
+        SELECT
+          TO_CHAR(days.day, 'YYYY-MM-DD') AS day,
+          COALESCE(rollup.events, 0)::INT AS events,
+          COALESCE(rollup.users, 0)::INT AS users
+        FROM generate_series(CURRENT_DATE - INTERVAL '6 days', CURRENT_DATE, INTERVAL '1 day') AS days(day)
+        LEFT JOIN (
+          SELECT
+            DATE_TRUNC('day', created_at)::DATE AS event_day,
+            COUNT(*)::INT AS events,
+            COUNT(DISTINCT user_id)::INT AS users
+          FROM analytics_events
+          WHERE created_at >= CURRENT_DATE - INTERVAL '6 days'
+          GROUP BY event_day
+        ) rollup ON rollup.event_day = days.day
+        ORDER BY days.day ASC
+      `,
+      sql`
+        SELECT
+          ae.id,
+          ae.event_name,
+          ae.event_group,
+          ae.path,
+          ae.tool,
+          ae.metadata,
+          ae.created_at,
+          u.username,
+          u.email
+        FROM analytics_events ae
+        LEFT JOIN users u ON u.id = ae.user_id
+        ORDER BY ae.created_at DESC
+        LIMIT 40
+      `,
+    ]);
+
+    return {
+      generated_at: new Date().toISOString(),
+      totals: {
+        users: countFrom(users),
+        events: countFrom(totalEvents),
+        eventsToday: countFrom(eventsToday),
+        eventsLast7Days: countFrom(eventsLast7Days),
+        feedback: countFrom(feedback),
+        savedText: countFrom(savedText),
+        savedImages: countFrom(savedImages),
+        savedTextImages: countFrom(savedTextImages),
+        notes: countFrom(notes),
+      },
+      activeUsers: {
+        today: countFrom(activeToday),
+        last7Days: countFrom(activeLast7Days),
+      },
+      logins: {
+        today: countFrom(loginsToday),
+        last7Days: countFrom(loginsLast7Days),
+        all: countFrom(loginsAll),
+      },
+      signups: {
+        today: countFrom(signupsToday),
+        last7Days: countFrom(signupsLast7Days),
+        all: countFrom(signupsAll),
+      },
+      eventBreakdown,
+      toolBreakdown,
+      deviceBreakdown,
+      dailyEvents,
+      recentEvents,
+    };
+  }
+
+  return null;
+};
+
 const handleUsers = async (req, path, body) => {
   const sql = getSql();
 
@@ -502,6 +756,12 @@ const handleUsers = async (req, path, body) => {
       VALUES (${firstname}, ${lastname}, ${username}, ${email}, ${hashPassword(password)}, 'password')
       RETURNING id, firstname, lastname, username, email
     `;
+    await recordAnalyticsEvent({
+      userId: rows[0].id,
+      eventName: 'signup',
+      eventGroup: 'auth',
+      metadata: { method: 'password' },
+    });
     const token = signToken(rows[0]);
     return { user: publicUser(rows[0]), token };
   }
@@ -515,6 +775,12 @@ const handleUsers = async (req, path, body) => {
     if (!user || !verifyPassword(password, user.password_hash)) {
       throw Object.assign(new Error('Authentication required'), { status: 401 });
     }
+    await recordAnalyticsEvent({
+      userId: user.id,
+      eventName: 'login',
+      eventGroup: 'auth',
+      metadata: { method: 'password' },
+    });
     const token = signToken(user);
     return { user: publicUser(user), token };
   }
@@ -526,6 +792,7 @@ const handleUsers = async (req, path, body) => {
       SELECT * FROM users WHERE google_sub = ${profile.sub} OR LOWER(email) = LOWER(${profile.email}) LIMIT 1
     `;
     let user = existing[0];
+    let createdGoogleUser = false;
     if (user) {
       const rows = await sql`
         UPDATE users
@@ -542,7 +809,14 @@ const handleUsers = async (req, path, body) => {
         RETURNING id, firstname, lastname, username, email
       `;
       user = rows[0];
+      createdGoogleUser = true;
     }
+    await recordAnalyticsEvent({
+      userId: user.id,
+      eventName: createdGoogleUser ? 'google_signup' : 'google_login',
+      eventGroup: 'auth',
+      metadata: { method: 'google' },
+    });
     const token = signToken(user);
     return { user: publicUser(user), token };
   }
@@ -552,6 +826,12 @@ const handleUsers = async (req, path, body) => {
   }
 
   if (req.method === 'POST' && path === '/users/logout') {
+    const user = await optionalAuthenticate(req);
+    await recordAnalyticsEvent({
+      userId: user?.id,
+      eventName: 'logout',
+      eventGroup: 'auth',
+    });
     return { status: 'signed_out' };
   }
 
@@ -569,6 +849,12 @@ const handleUsers = async (req, path, body) => {
       const rows = passwordHash
         ? await sql`UPDATE users SET firstname = ${firstname}, lastname = ${lastname}, password_hash = ${passwordHash} WHERE id = ${user.id} RETURNING id, firstname, lastname, username, email`
         : await sql`UPDATE users SET firstname = ${firstname}, lastname = ${lastname} WHERE id = ${user.id} RETURNING id, firstname, lastname, username, email`;
+      await recordAnalyticsEvent({
+        userId: user.id,
+        eventName: 'profile_update',
+        eventGroup: 'auth',
+        metadata: { password_changed: Boolean(passwordHash) },
+      });
       return publicUser(rows[0]);
     }
   }
@@ -586,6 +872,7 @@ const handleGoogleUser = async (req, path, body) => {
     SELECT * FROM users WHERE google_sub = ${profile.sub} OR LOWER(email) = LOWER(${profile.email}) LIMIT 1
   `;
   let user = existing[0];
+  let createdGoogleUser = false;
   if (user) {
     const rows = await sql`
       UPDATE users
@@ -602,7 +889,14 @@ const handleGoogleUser = async (req, path, body) => {
       RETURNING id, firstname, lastname, username, email
     `;
     user = rows[0];
+    createdGoogleUser = true;
   }
+  await recordAnalyticsEvent({
+    userId: user.id,
+    eventName: createdGoogleUser ? 'google_signup' : 'google_login',
+    eventGroup: 'auth',
+    metadata: { method: 'google' },
+  });
   const token = signToken(user);
   return { user: publicUser(user), token };
 };
@@ -626,11 +920,24 @@ const handleEncryptions = async (req, path, body) => {
   if (req.method === 'GET' && !rawId) return listEncryption(bucket, user);
   if (req.method === 'POST' && !rawId) {
     checkRateLimit(req, 'write');
-    return saveEncryption(bucket, user, body);
+    const saved = await saveEncryption(bucket, user, body);
+    await recordAnalyticsEvent({
+      userId: user.id,
+      eventName: `save_${bucket}`,
+      eventGroup: 'storage',
+      tool: bucket,
+    });
+    return saved;
   }
   if (req.method === 'DELETE' && rawId) {
     const rows = await deleteEncryption(bucket, user, Number(rawId));
     if (!rows[0]) throw Object.assign(new Error('Record not found'), { status: 404 });
+    await recordAnalyticsEvent({
+      userId: user.id,
+      eventName: `delete_${bucket}`,
+      eventGroup: 'storage',
+      tool: bucket,
+    });
     return { status: 'deleted', type: bucket, id: Number(rawId) };
   }
   return null;
@@ -657,6 +964,13 @@ const handleNotes = async (req, path, body) => {
       VALUES (${user.id}, ${requireText(body.title, 'Title', 120)}, ${requireText(body.ciphertext, 'Ciphertext', MAX_NOTE_BYTES)}, ${optionalText(body.algorithm || 'AES-GCM', 40)}, ${optionalText(body.kdf || 'PBKDF2', 60)}, ${Number(body.iterations) || 0}, ${optionalText(body.salt, 256)}, ${optionalText(body.iv, 256)})
       RETURNING id, user_id, title, ciphertext, algorithm, kdf, iterations, salt, iv
     `;
+    await recordAnalyticsEvent({
+      userId: user.id,
+      eventName: 'note_save',
+      eventGroup: 'storage',
+      tool: 'secure-notes',
+      metadata: { algorithm: body.algorithm || 'AES-GCM', kdf: body.kdf || 'PBKDF2' },
+    });
     return rows[0];
   }
 
@@ -664,6 +978,12 @@ const handleNotes = async (req, path, body) => {
   if (idMatch && req.method === 'DELETE') {
     const rows = await sql`DELETE FROM secure_notes WHERE id = ${Number(idMatch[1])} AND user_id = ${user.id} RETURNING id`;
     if (!rows[0]) throw Object.assign(new Error('Note not found'), { status: 404 });
+    await recordAnalyticsEvent({
+      userId: user.id,
+      eventName: 'note_delete',
+      eventGroup: 'storage',
+      tool: 'secure-notes',
+    });
     return { status: 'deleted', type: 'note', id: Number(idMatch[1]) };
   }
 
@@ -687,6 +1007,14 @@ const handleFeedback = async (req, path, body) => {
     } catch (error) {
       console.error('Feedback email failed', error?.code || error?.name || 'unknown_error');
     }
+    const user = await optionalAuthenticate(req);
+    await recordAnalyticsEvent({
+      userId: user?.id,
+      eventName: 'feedback_submitted',
+      eventGroup: 'feedback',
+      tool: record.related_tool,
+      metadata: { type: record.type },
+    });
     return { id: record.id, status: 'received' };
   }
 
@@ -773,6 +1101,7 @@ module.exports = async (req, res) => {
 
     await ensureSchema();
     const response =
+      (await handleAnalytics(req, path, body)) ||
       (await handleFeedback(req, path, body)) ||
       (await handleUsers(req, path, body)) ||
       (await handleNotes(req, path, body)) ||

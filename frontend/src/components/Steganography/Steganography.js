@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
-import { Alert, Box, Button, Grid, Stack, Tab, Tabs, TextField, CircularProgress } from '@mui/material';
+import { Alert, Box, Button, Chip, Stack, Tab, Tabs, TextField, CircularProgress, Typography } from '@mui/material';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import DownloadIcon from '@mui/icons-material/Download';
 import SaveIcon from '@mui/icons-material/Save';
 import api, { isMockerEnabled } from '../../api/client';
+import { trackToolAction } from '../../analytics';
 import { useFeedback } from '../Feedback/FeedbackProvider';
+import useMobileResultReveal from '../../hooks/useMobileResultReveal';
 import PageShell from '../Layout/PageShell';
 import SectionHeader from '../Layout/SectionHeader';
 import SurfacePanel from '../Layout/SurfacePanel';
@@ -19,6 +21,8 @@ const Steganography = () => {
   const [passkey, setPasskey] = useState('');
   const [saving, setSaving] = useState(false);
   const { notify } = useFeedback();
+  const { resultRef, revealResult } = useMobileResultReveal();
+  const resultReady = Boolean(encodedImageSrc || decodedMessage);
 
   const handleImageChange = (event) => {
     const file = event.target.files?.[0];
@@ -65,7 +69,9 @@ const Steganography = () => {
       setEncodedImageSrc(canvas.toDataURL('image/png'));
       setDecodedMessage('');
       setIsLoading(false);
+      trackToolAction('steganography', 'encode');
       notify('Message hidden inside image.', 'success');
+      revealResult();
     };
 
     image.onerror = () => {
@@ -114,7 +120,9 @@ const Steganography = () => {
       setDecodedMessage(cleanMessage);
       setEncodedImageSrc('');
       setIsLoading(false);
+      trackToolAction('steganography', 'decode');
       notify(cleanMessage ? 'Message decoded.' : 'No hidden message found with this passkey.', cleanMessage ? 'success' : 'warning');
+      if (cleanMessage) revealResult();
     };
 
     image.onerror = () => {
@@ -136,6 +144,7 @@ const Steganography = () => {
       link.download = 'decoded_message.txt';
     }
     link.click();
+    trackToolAction('steganography', 'download');
   };
 
   const handleCloudSave = async () => {
@@ -148,6 +157,7 @@ const Steganography = () => {
       setSaving(true);
       if (isMockerEnabled()) {
         await api.post('/api/rust/textimage', { encrypted_image_link: encodedImageSrc });
+        trackToolAction('steganography', 'save');
         notify('Encoded image saved to mock history. The passkey was not stored.', 'success');
         return;
       }
@@ -172,6 +182,7 @@ const Steganography = () => {
         throw new Error(cloudinaryData?.error?.message || 'Cloudinary upload failed');
       }
       await api.post('/api/rust/textimage', { encrypted_image_link: cloudinaryData.secure_url || cloudinaryData.url });
+      trackToolAction('steganography', 'save');
       notify('Encoded image saved. The passkey was not stored.', 'success');
     } catch (error) {
       notify(error.message || 'Unable to save encoded image.', 'error');
@@ -195,8 +206,14 @@ const Steganography = () => {
               <Tab value="encrypt" label="Encode" />
               <Tab value="decrypt" label="Decode" />
             </Tabs>
-            <Grid container spacing={3} sx={{ width: '100%', m: 0 }}>
-              <Grid item xs={12} md={6}>
+            <Box
+              sx={{
+                display: 'grid',
+                gridTemplateColumns: { xs: '1fr', md: 'repeat(2, minmax(0, 1fr))' },
+                gap: { xs: 2, md: 3 },
+              }}
+            >
+              <Box>
                 <Stack spacing={2}>
                   {operation === 'encrypt' ? (
                     <TextField label="Message to hide" multiline minRows={6} fullWidth value={message} onChange={(event) => setMessage(event.target.value)} />
@@ -210,9 +227,13 @@ const Steganography = () => {
                     {isLoading ? <CircularProgress size={22} /> : operation === 'encrypt' ? 'Hide Message' : 'Decode Message'}
                   </Button>
                 </Stack>
-              </Grid>
-              <Grid item xs={12} md={6}>
+              </Box>
+              <Box ref={resultRef} sx={{ scrollMarginTop: { xs: 2, md: 0 } }} role="region" aria-label="Steganography result">
                 <Stack spacing={2}>
+                  <Stack direction="row" spacing={1} alignItems="center" justifyContent="space-between">
+                    <Typography variant="h6">Result</Typography>
+                    <Chip size="small" label={resultReady ? 'Ready' : 'Waiting'} color={resultReady ? 'success' : 'default'} />
+                  </Stack>
                   {imageSrc ? (
                     <Box component="img" src={encodedImageSrc || imageSrc} alt="Steganography preview" sx={{ width: '100%', maxHeight: 340, objectFit: 'contain', bgcolor: 'action.hover', borderRadius: 2, border: '1px solid', borderColor: 'divider' }} />
                   ) : (
@@ -230,8 +251,8 @@ const Steganography = () => {
                     </Button>
                   </Stack>
                 </Stack>
-              </Grid>
-            </Grid>
+              </Box>
+            </Box>
           </Stack>
         </SurfacePanel>
       </Stack>

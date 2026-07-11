@@ -105,4 +105,27 @@ describe('mockBackendAdapter', () => {
     });
     expect(login.data.token).toContain('mock-krypt-token');
   });
+
+  it('tracks analytics events in local mock mode', async () => {
+    const login = await request('post', '/api/rust/users/login', {
+      email: 'demo@krypt.local',
+      password: 'demo-local-passphrase',
+    });
+
+    await request('post', '/api/rust/analytics/events', {
+      event_name: 'page_view',
+      event_group: 'navigation',
+      path: '/home',
+      metadata: { device_type: 'mobile', viewport_width: 390 },
+    }, login.data.token);
+
+    const summary = await request('get', '/api/rust/analytics/summary', undefined, login.data.token);
+
+    expect(summary.data.totals.events).toBeGreaterThanOrEqual(2);
+    expect(summary.data.deviceBreakdown).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ device_type: 'mobile' }),
+      ]),
+    );
+  });
 });

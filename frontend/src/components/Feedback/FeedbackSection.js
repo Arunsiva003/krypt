@@ -1,5 +1,5 @@
 import React, { useContext, useState } from 'react';
-import { Alert, Box, Button, Container, Grid, Paper, Stack, TextField } from '@mui/material';
+import { Alert, Box, Button, Container, Paper, Stack, TextField } from '@mui/material';
 import UserContext from '../../UserContext';
 import api from '../../api/client';
 import SectionHeader from '../Layout/SectionHeader';
@@ -55,14 +55,20 @@ const FeedbackSection = () => {
             {submitted ? (
               <Alert severity="success">Suggestion received. Krypt will keep evolving around real user needs.</Alert>
             ) : null}
-            <Grid container spacing={1.5}>
-              <Grid item xs={12} sm={6}>
+            <Box
+              sx={{
+                display: 'grid',
+                gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))' },
+                gap: 1.5,
+              }}
+            >
+              <Box>
                 <TextField label="Name" value={feedback.name} onChange={updateField('name')} fullWidth />
-              </Grid>
-              <Grid item xs={12} sm={6}>
+              </Box>
+              <Box>
                 <TextField label="Email" value={feedback.email} onChange={updateField('email')} fullWidth />
-              </Grid>
-            </Grid>
+              </Box>
+            </Box>
             <TextField label="Related tool" value={feedback.related_tool} onChange={updateField('related_tool')} fullWidth />
             <TextField label="Suggestion" value={feedback.message} onChange={updateField('message')} multiline minRows={4} fullWidth required />
             <Button type="submit" variant="contained" size="large">Send suggestion</Button>
