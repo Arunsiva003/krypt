@@ -4,6 +4,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import DownloadIcon from '@mui/icons-material/Download';
 import api from '../../api/client';
 import { useFeedback } from '../Feedback/FeedbackProvider';
+import { imageArtifactDownload, triggerArtifactDownload } from './downloadArtifact';
 
 const ImageEncryptionDashboard = ({ onCountChange }) => {
   const [imageEncryptions, setImageEncryptions] = useState([]);
@@ -21,10 +22,8 @@ const ImageEncryptionDashboard = ({ onCountChange }) => {
   }, [notify, onCountChange]);
 
   const handleDownloadImage = (encryptedImageLink, id) => {
-    const link = document.createElement('a');
-    link.href = encryptedImageLink;
-    link.download = `encrypted_image_${id}.png`;
-    link.click();
+    const didDownload = triggerArtifactDownload(imageArtifactDownload(encryptedImageLink, id, 'image'));
+    if (!didDownload) notify('Unable to download this image package.', 'error');
   };
 
   const handleDelete = async (id) => {
@@ -60,7 +59,7 @@ const ImageEncryptionDashboard = ({ onCountChange }) => {
                 <Typography variant="h6">Encrypted Image</Typography>
                 <Alert severity="info">Key not stored</Alert>
                 <Button startIcon={<DownloadIcon />} onClick={() => handleDownloadImage(encryption.encrypted_image_link, encryption.id)}>
-                  Download
+                  Download package
                 </Button>
                 <IconButton aria-label="Delete encrypted image" onClick={() => handleDelete(encryption.id)}>
                   <DeleteIcon />

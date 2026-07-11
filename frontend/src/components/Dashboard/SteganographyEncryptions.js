@@ -4,6 +4,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import DownloadIcon from '@mui/icons-material/Download';
 import api from '../../api/client';
 import { useFeedback } from '../Feedback/FeedbackProvider';
+import { imageArtifactDownload, triggerArtifactDownload } from './downloadArtifact';
 
 const SteganographyEncryptions = ({ onCountChange }) => {
   const [encryptions, setEncryptions] = useState([]);
@@ -20,15 +21,9 @@ const SteganographyEncryptions = ({ onCountChange }) => {
       .finally(() => setIsLoading(false));
   }, [notify, onCountChange]);
 
-  const handleDownload = async (encryptedImageLink) => {
-    try {
-      const response = await fetch(encryptedImageLink);
-      const blob = await response.blob();
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(blob);
-      link.download = 'encoded_image.png';
-      link.click();
-    } catch {
+  const handleDownload = (encryptedImageLink, id) => {
+    const didDownload = triggerArtifactDownload(imageArtifactDownload(encryptedImageLink, id, 'steganography'));
+    if (!didDownload) {
       notify('Unable to download this image.', 'error');
     }
   };
@@ -67,7 +62,7 @@ const SteganographyEncryptions = ({ onCountChange }) => {
                 <img src={encryption.encrypted_image_link} alt="Encoded steganography result" style={{ width: '100%', maxHeight: 220, objectFit: 'cover' }} />
                 <Alert severity="info">Passkey not stored</Alert>
                 <Stack direction="row" spacing={1}>
-                  <Button startIcon={<DownloadIcon />} onClick={() => handleDownload(encryption.encrypted_image_link)}>
+                  <Button startIcon={<DownloadIcon />} onClick={() => handleDownload(encryption.encrypted_image_link, encryption.id)}>
                     Download
                   </Button>
                   <IconButton aria-label="Delete steganography record" onClick={() => handleDelete(encryption.id)}>
