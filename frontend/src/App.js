@@ -1,5 +1,6 @@
 import React, { useContext, useEffect } from 'react';
 import { BrowserRouter as Router, Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import { Box, CircularProgress } from '@mui/material';
 import './App.css';
 import Login from './pages/Login/login'
 import SignUp from './pages/SignUp/SignUp';
@@ -18,19 +19,28 @@ import Analytics from './pages/Analytics/Analytics';
 import { trackEvent } from './analytics';
 import { isOwnerUser } from './adminAccess';
 
+const RouteLoading = () => (
+  <Box sx={{ minHeight: '60vh', display: 'grid', placeItems: 'center' }}>
+    <CircularProgress size={30} />
+  </Box>
+);
+
 const ProtectedRoute = ({ children }) => {
-  const { isAuthenticated } = useContext(UserContext);
+  const { isAuthenticated, isAuthLoading } = useContext(UserContext);
+  if (isAuthLoading) return <RouteLoading />;
   return isAuthenticated ? children : <Navigate to="/" replace />;
 };
 
 const OwnerRoute = ({ children }) => {
-  const { isAuthenticated, user } = useContext(UserContext);
+  const { isAuthenticated, isAuthLoading, user } = useContext(UserContext);
+  if (isAuthLoading) return <RouteLoading />;
   if (!isAuthenticated) return <Navigate to="/" replace />;
   return isOwnerUser(user) ? children : <Navigate to="/home" replace />;
 };
 
 const PublicOnlyRoute = ({ children }) => {
-  const { isAuthenticated } = useContext(UserContext);
+  const { isAuthenticated, isAuthLoading } = useContext(UserContext);
+  if (isAuthLoading) return <RouteLoading />;
   return isAuthenticated ? <Navigate to="/home" replace /> : children;
 };
 
@@ -72,7 +82,7 @@ function App() {
 }
 
 const AppFrame = () => {
-  const { isAuthenticated } = useContext(UserContext);
+  const { isAuthenticated, isAuthLoading } = useContext(UserContext);
   const location = useLocation();
   const publicPaths = ['/', '/login', '/signup'];
   const showWorkspaceNav = isAuthenticated && !publicPaths.includes(location.pathname);
@@ -82,7 +92,7 @@ const AppFrame = () => {
       {showWorkspaceNav ? <Navbar /> : null}
       <div className={showWorkspaceNav ? 'content with-workspace-nav' : 'content'}>
         <Routes>
-          <Route path='/' element={isAuthenticated ? <Navigate to="/home" replace /> : <Landing />} />
+          <Route path='/' element={isAuthLoading ? <RouteLoading /> : isAuthenticated ? <Navigate to="/home" replace /> : <Landing />} />
           <Route path='/login' element={<PublicOnlyRoute><Login /></PublicOnlyRoute>} />
           <Route path='/signup' element={<PublicOnlyRoute><SignUp /></PublicOnlyRoute>} />
           <Route path='/tools' element={<ToolGuide />} />

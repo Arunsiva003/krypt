@@ -18,6 +18,7 @@ const RATE_LIMITS = {
   feedback: { windowMs: 60 * 60 * 1000, max: 12 },
   write: { windowMs: 60 * 1000, max: 60 },
 };
+const TRANSIENT_DB_ERROR_CODES = new Set(['53300', '57P03', '08000', '08001', '08003', '08006']);
 const ANALYTICS_BLOCKED_METADATA_KEY = /(cipher|content|credential|email|file|image|key|message|note|password|payload|plain|secret|text|token)/i;
 const ENCRYPTION_TABLES = {
   text: {
@@ -485,8 +486,21 @@ const ensureSchema = async () => {
     await Promise.all(Object.values(ENCRYPTION_TABLES).map(backfillEncryptionValueColumn));
     await relaxLegacyRequiredColumns('feedback_submissions', ['id', 'name', 'email', 'type', 'related_tool', 'message', 'created_at']);
     await relaxLegacyRequiredColumns('analytics_events', ['id', 'user_id', 'event_name', 'event_group', 'path', 'tool', 'metadata', 'created_at']);
-  })();
+  })().catch((error) => {
+    schemaReady = undefined;
+    columnCache.clear();
+    throw error;
+  });
   return schemaReady;
+};
+
+const requiresAuthTokenBeforeSchema = (req, path) => {
+  if (path === '/users/me' || path === '/encryptions/counts' || path === '/analytics/summary') return true;
+  if (path === '/feedback' && req.method === 'GET') return true;
+  if (/^\/users\/\d+$/.test(path)) return true;
+  if (/^\/(text|image|textimage)(?:\/\d+)?$/.test(path)) return true;
+  if (/^\/notes(?:\/\d+)?$/.test(path)) return true;
+  return false;
 };
 
 const requireText = (value, label, maxBytes = MAX_TEXT_BYTES) => {
@@ -578,18 +592,26 @@ const verifyToken = (token) => {
   return claims;
 };
 
-const authenticate = async (req) => {
+const requestToken = (req) => {
   const authorization = req.headers.authorization || '';
-  const token = cookieValue(req, 'krypt_session') || authorization.replace(/^Bearer\s+/i, '');
-  const claims = verifyToken(token);
+  return cookieValue(req, 'krypt_session') || authorization.replace(/^Bearer\s+/i, '');
+};
+
+const requireRequestToken = (req) => {
+  const token = requestToken(req);
+  if (!token) throw Object.assign(new Error('Authentication required'), { status: 401 });
+  return token;
+};
+
+const authenticate = async (req) => {
+  const claims = verifyToken(requireRequestToken(req));
   const rows = await getSql()`SELECT id, firstname, lastname, username, email FROM users WHERE id = ${Number(claims.sub)} LIMIT 1`;
   if (!rows[0]) throw Object.assign(new Error('Authentication required'), { status: 401 });
   return rows[0];
 };
 
 const optionalAuthenticate = async (req) => {
-  const authorization = req.headers.authorization || '';
-  const token = cookieValue(req, 'krypt_session') || authorization.replace(/^Bearer\s+/i, '');
+  const token = requestToken(req);
   if (!token) return null;
   try {
     return await authenticate(req);
@@ -1358,6 +1380,10 @@ module.exports = async (req, res) => {
       return;
     }
 
+    if (requiresAuthTokenBeforeSchema(req, path)) {
+      verifyToken(requireRequestToken(req));
+    }
+
     await ensureSchema();
     const response =
       (await handleAnalytics(req, path, body)) ||
@@ -1381,7 +1407,7 @@ module.exports = async (req, res) => {
     }
     json(res, 200, response);
   } catch (error) {
-    const status = error.status || 500;
+    const status = error.status || (TRANSIENT_DB_ERROR_CODES.has(error.code) ? 503 : 500);
     console.error('API error', {
       status,
       code: error.code || error.name || 'unknown_error',

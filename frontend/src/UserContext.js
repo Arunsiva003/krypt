@@ -4,11 +4,17 @@ import api, { isMockerEnabled, readStoredAuth, setAuthToken, writeStoredAuth } f
 const UserContext = createContext(null);
 
 export const UserProvider = ({ children }) => {
+  const mockMode = isMockerEnabled();
   const [auth, setAuthState] = useState(() => {
     const storedAuth = readStoredAuth();
-    setAuthToken(storedAuth?.token);
-    return storedAuth;
+    if (mockMode) {
+      setAuthToken(storedAuth?.token);
+      return storedAuth;
+    }
+    setAuthToken(null);
+    return null;
   });
+  const [isAuthLoading, setIsAuthLoading] = useState(!mockMode);
   const user = auth?.user || null;
   const token = auth?.token || null;
 
@@ -19,22 +25,29 @@ export const UserProvider = ({ children }) => {
 
   useEffect(() => {
     let active = true;
-    if (isMockerEnabled()) return undefined;
+    if (mockMode) {
+      setIsAuthLoading(false);
+      return undefined;
+    }
     api.get('/api/rust/users/me')
       .then((response) => {
         if (active) setAuthState({ user: response.data });
       })
       .catch(() => {
         if (active) setAuthState(null);
+      })
+      .finally(() => {
+        if (active) setIsAuthLoading(false);
       });
     return () => {
       active = false;
     };
-  }, []);
+  }, [mockMode]);
 
   const setAuth = (nextAuth) => {
     const normalizedAuth = nextAuth?.user ? nextAuth : null;
     setAuthToken(normalizedAuth?.token);
+    setIsAuthLoading(false);
     setAuthState(normalizedAuth);
   };
 
@@ -43,15 +56,16 @@ export const UserProvider = ({ children }) => {
   };
 
   const logout = () => {
-    if (!isMockerEnabled()) {
+    if (!mockMode) {
       api.post('/api/rust/users/logout').catch(() => {});
     }
     setAuthToken(null);
+    setIsAuthLoading(false);
     setAuthState(null);
   };
 
   return (
-    <UserContext.Provider value={{ auth, user, token, isAuthenticated: Boolean(user), setAuth, setUser, logout }}>
+    <UserContext.Provider value={{ auth, user, token, isAuthenticated: Boolean(user), isAuthLoading, setAuth, setUser, logout }}>
       {children}
     </UserContext.Provider>
   );
