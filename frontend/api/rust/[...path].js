@@ -295,20 +295,39 @@ const hardenFeedbackTable = async () => {
 };
 
 const hardenAnalyticsTable = async () => {
+  let columns = await tableColumns('analytics_events', { refresh: true });
+  const hasMetadata = columns.some((column) => column.column_name === 'metadata');
   await queryRaw('ALTER TABLE analytics_events ADD COLUMN IF NOT EXISTS user_id INTEGER');
   await queryRaw("ALTER TABLE analytics_events ADD COLUMN IF NOT EXISTS event_name TEXT NOT NULL DEFAULT 'event'");
   await queryRaw("ALTER TABLE analytics_events ADD COLUMN IF NOT EXISTS event_group TEXT NOT NULL DEFAULT 'app'");
   await queryRaw('ALTER TABLE analytics_events ADD COLUMN IF NOT EXISTS path TEXT');
   await queryRaw('ALTER TABLE analytics_events ADD COLUMN IF NOT EXISTS tool TEXT');
-  await queryRaw("ALTER TABLE analytics_events ADD COLUMN IF NOT EXISTS metadata JSONB NOT NULL DEFAULT '{}'::jsonb");
+  if (!hasMetadata) {
+    await queryRaw("ALTER TABLE analytics_events ADD COLUMN metadata JSONB NOT NULL DEFAULT '{}'::jsonb");
+  }
   await queryRaw('ALTER TABLE analytics_events ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()');
+  columns = await tableColumns('analytics_events', { refresh: true });
+  const metadataColumn = columns.find((column) => column.column_name === 'metadata');
+  const metadataIsJson = metadataColumn?.data_type === 'jsonb' || metadataColumn?.data_type === 'json';
   await queryRaw("ALTER TABLE analytics_events ALTER COLUMN event_name SET DEFAULT 'event'");
   await queryRaw("ALTER TABLE analytics_events ALTER COLUMN event_group SET DEFAULT 'app'");
-  await queryRaw("ALTER TABLE analytics_events ALTER COLUMN metadata SET DEFAULT '{}'::jsonb");
+  if (metadataColumn) {
+    await queryRaw(
+      metadataIsJson
+        ? "ALTER TABLE analytics_events ALTER COLUMN metadata SET DEFAULT '{}'::jsonb"
+        : "ALTER TABLE analytics_events ALTER COLUMN metadata SET DEFAULT '{}'",
+    );
+  }
   await queryRaw('ALTER TABLE analytics_events ALTER COLUMN created_at SET DEFAULT NOW()');
   await queryRaw("UPDATE analytics_events SET event_name = 'event' WHERE event_name IS NULL");
   await queryRaw("UPDATE analytics_events SET event_group = 'app' WHERE event_group IS NULL");
-  await queryRaw("UPDATE analytics_events SET metadata = '{}'::jsonb WHERE metadata IS NULL");
+  if (metadataColumn) {
+    await queryRaw(
+      metadataIsJson
+        ? "UPDATE analytics_events SET metadata = '{}'::jsonb WHERE metadata IS NULL"
+        : "UPDATE analytics_events SET metadata = '{}' WHERE metadata IS NULL",
+    );
+  }
   await queryRaw('UPDATE analytics_events SET created_at = NOW() WHERE created_at IS NULL');
   columnCache.delete('analytics_events');
 };
@@ -671,18 +690,24 @@ const recordAnalyticsEvent = async ({
   metadata = {},
 }) => {
   try {
-    await getSql()`
+    const columns = await tableColumns('analytics_events');
+    const metadataColumn = columns.find((column) => column.column_name === 'metadata');
+    const metadataIsJson = metadataColumn?.data_type === 'jsonb' || metadataColumn?.data_type === 'json';
+    await queryRaw(
+      `
       INSERT INTO analytics_events (user_id, event_name, event_group, path, tool, metadata, created_at)
-      VALUES (
-        ${userId ? Number(userId) : null},
-        ${analyticsLabel(eventName)},
-        ${analyticsLabel(eventGroup, 'app', 40)},
-        ${analyticsPath(path)},
-        ${tool ? analyticsLabel(tool, 'tool', 80) : null},
-        ${JSON.stringify(sanitizeAnalyticsMetadata(metadata))}::jsonb,
-        ${new Date()}
-      )
-    `;
+      VALUES ($1, $2, $3, $4, $5, $6${metadataIsJson ? '::jsonb' : ''}, $7)
+      `,
+      [
+        userId ? Number(userId) : null,
+        analyticsLabel(eventName),
+        analyticsLabel(eventGroup, 'app', 40),
+        analyticsPath(path),
+        tool ? analyticsLabel(tool, 'tool', 80) : null,
+        JSON.stringify(sanitizeAnalyticsMetadata(metadata)),
+        new Date(),
+      ],
+    );
   } catch (error) {
     console.error('Analytics event failed', {
       code: error.code || error.name || 'unknown_error',
