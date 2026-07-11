@@ -59,6 +59,11 @@ const databaseConnectionString = () => {
   }
 };
 
+const numberFromEnv = (key, fallback) => {
+  const value = Number(process.env[key]);
+  return Number.isFinite(value) && value > 0 ? value : fallback;
+};
+
 const json = (res, status, data) => {
   res.statusCode = status;
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
@@ -160,10 +165,15 @@ const getSql = () => {
     const ssl = process.env.KRYPT_DB_SSL === 'false'
       ? false
       : { rejectUnauthorized, ...(ca ? { ca } : {}) };
+    const requestedPoolMax = numberFromEnv('KRYPT_DB_POOL_MAX', 1);
     pgPool = new Pool({
       connectionString: databaseConnectionString(),
       ssl,
-      max: Number(process.env.KRYPT_DB_POOL_MAX || 5),
+      max: Math.max(1, Math.min(requestedPoolMax, 2)),
+      idleTimeoutMillis: numberFromEnv('KRYPT_DB_IDLE_TIMEOUT_MS', 1000),
+      connectionTimeoutMillis: numberFromEnv('KRYPT_DB_CONNECTION_TIMEOUT_MS', 5000),
+      maxUses: numberFromEnv('KRYPT_DB_MAX_USES', 25),
+      allowExitOnIdle: true,
     });
   }
   if (!sqlClient) {
