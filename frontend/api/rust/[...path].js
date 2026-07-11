@@ -19,11 +19,35 @@ const RATE_LIMITS = {
   write: { windowMs: 60 * 1000, max: 60 },
 };
 const ANALYTICS_BLOCKED_METADATA_KEY = /(cipher|content|credential|email|file|image|key|message|note|password|payload|plain|secret|text|token)/i;
+const ENCRYPTION_TABLES = {
+  text: {
+    table: 'text_to_text',
+    valueKey: 'encrypted_text',
+    valueLabel: 'Encrypted text',
+    maxBytes: MAX_TEXT_BYTES,
+    valueColumns: ['encrypted_text', 'ciphertext', 'encrypted_data', 'text', 'content'],
+  },
+  image: {
+    table: 'image_to_image',
+    valueKey: 'encrypted_image_link',
+    valueLabel: 'Encrypted image',
+    maxBytes: MAX_IMAGE_BYTES,
+    valueColumns: ['encrypted_image_link', 'encrypted_image', 'image_link', 'image_url', 'image', 'data_url'],
+  },
+  textimage: {
+    table: 'text_to_image',
+    valueKey: 'encrypted_image_link',
+    valueLabel: 'Encoded image',
+    maxBytes: MAX_IMAGE_BYTES,
+    valueColumns: ['encrypted_image_link', 'encrypted_image', 'image_link', 'image_url', 'image', 'data_url'],
+  },
+};
 
 let pgPool;
 let sqlClient;
 let schemaReady;
 const rateBuckets = new Map();
+const columnCache = new Map();
 
 const databaseConnectionString = () => {
   try {
@@ -152,6 +176,121 @@ const getSql = () => {
   return sqlClient;
 };
 
+const quoteIdentifier = (value) => `"${String(value).replace(/"/g, '""')}"`;
+const quoteLiteral = (value) => `'${String(value).replace(/'/g, "''")}'`;
+
+const queryRaw = async (text, values = []) => {
+  getSql();
+  const result = await pgPool.query(text, values);
+  return result.rows;
+};
+
+const tableColumns = async (tableName, { refresh = false } = {}) => {
+  if (!refresh && columnCache.has(tableName)) return columnCache.get(tableName);
+  const rows = await queryRaw(
+    `
+      SELECT column_name, data_type, is_nullable, column_default, identity_generation, is_generated
+      FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name = $1
+      ORDER BY ordinal_position
+    `,
+    [tableName],
+  );
+  columnCache.set(tableName, rows);
+  return rows;
+};
+
+const columnSet = (columns) => new Set(columns.map((column) => column.column_name));
+
+const firstExistingColumn = (columns, candidates) => {
+  const names = columnSet(columns);
+  return candidates.find((candidate) => names.has(candidate)) || null;
+};
+
+const legacyFallbackValue = (column, value, user) => {
+  const name = column.column_name.toLowerCase();
+  if (name === 'user_id') return user.id;
+  if (name === 'username') return user.username;
+  if (name.includes('key')) return KEY_NOT_STORED;
+  if (name.includes('image') || name.includes('text') || name.includes('cipher') || name.includes('data')) return value;
+  if (column.data_type.includes('int') || column.data_type === 'numeric') return 0;
+  if (column.data_type === 'boolean') return false;
+  if (column.data_type.includes('timestamp') || column.data_type === 'date') return new Date();
+  return '';
+};
+
+const normalizeLegacyTable = async (tableName, valueColumns = []) => {
+  const columns = await tableColumns(tableName, { refresh: true });
+  const names = columnSet(columns);
+
+  if (!names.has('key_used')) {
+    await queryRaw(`ALTER TABLE ${quoteIdentifier(tableName)} ADD COLUMN key_used TEXT DEFAULT ${quoteLiteral(KEY_NOT_STORED)}`);
+  } else {
+    await queryRaw(`ALTER TABLE ${quoteIdentifier(tableName)} ALTER COLUMN key_used SET DEFAULT ${quoteLiteral(KEY_NOT_STORED)}`);
+    await queryRaw(`UPDATE ${quoteIdentifier(tableName)} SET key_used = $1 WHERE key_used IS NULL`, [KEY_NOT_STORED]);
+  }
+
+  if (!names.has('created_at')) {
+    await queryRaw(`ALTER TABLE ${quoteIdentifier(tableName)} ADD COLUMN created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()`);
+  }
+
+  for (const valueColumn of valueColumns) {
+    if (!names.has(valueColumn)) {
+      await queryRaw(`ALTER TABLE ${quoteIdentifier(tableName)} ADD COLUMN ${quoteIdentifier(valueColumn)} TEXT`);
+    }
+  }
+
+  const refreshedColumns = await tableColumns(tableName, { refresh: true });
+  for (const column of refreshedColumns) {
+    const generated = column.identity_generation || column.is_generated === 'ALWAYS';
+    const standardColumns = new Set(['id', 'user_id', 'username', 'key_used', 'created_at', ...valueColumns]);
+    if (
+      !standardColumns.has(column.column_name) &&
+      column.is_nullable === 'NO' &&
+      !column.column_default &&
+      !generated
+    ) {
+      await queryRaw(`ALTER TABLE ${quoteIdentifier(tableName)} ALTER COLUMN ${quoteIdentifier(column.column_name)} DROP NOT NULL`);
+    }
+  }
+
+  columnCache.delete(tableName);
+};
+
+const relaxLegacyRequiredColumns = async (tableName, standardColumns) => {
+  const columns = await tableColumns(tableName, { refresh: true });
+  for (const column of columns) {
+    const generated = column.identity_generation || column.is_generated === 'ALWAYS';
+    if (
+      !standardColumns.includes(column.column_name) &&
+      column.is_nullable === 'NO' &&
+      !column.column_default &&
+      !generated
+    ) {
+      await queryRaw(`ALTER TABLE ${quoteIdentifier(tableName)} ALTER COLUMN ${quoteIdentifier(column.column_name)} DROP NOT NULL`);
+    }
+  }
+  columnCache.delete(tableName);
+};
+
+const backfillEncryptionValueColumn = async (config) => {
+  const columns = await tableColumns(config.table, { refresh: true });
+  const names = columnSet(columns);
+  if (!names.has(config.valueKey)) return;
+  for (const candidate of config.valueColumns) {
+    if (candidate !== config.valueKey && names.has(candidate)) {
+      await queryRaw(
+        `
+          UPDATE ${quoteIdentifier(config.table)}
+          SET ${quoteIdentifier(config.valueKey)} = ${quoteIdentifier(candidate)}
+          WHERE ${quoteIdentifier(config.valueKey)} IS NULL AND ${quoteIdentifier(candidate)} IS NOT NULL
+        `,
+      );
+    }
+  }
+  columnCache.delete(config.table);
+};
+
 const ensureSchema = async () => {
   if (schemaReady) return schemaReady;
   const sql = getSql();
@@ -269,6 +408,12 @@ const ensureSchema = async () => {
     await sql`CREATE INDEX IF NOT EXISTS analytics_events_created_at_idx ON analytics_events (created_at DESC)`;
     await sql`CREATE INDEX IF NOT EXISTS analytics_events_user_id_idx ON analytics_events (user_id)`;
     await sql`CREATE INDEX IF NOT EXISTS analytics_events_name_idx ON analytics_events (event_name)`;
+    await normalizeLegacyTable('text_to_text', ['encrypted_text']);
+    await normalizeLegacyTable('image_to_image', ['encrypted_image_link']);
+    await normalizeLegacyTable('text_to_image', ['encrypted_image_link']);
+    await Promise.all(Object.values(ENCRYPTION_TABLES).map(backfillEncryptionValueColumn));
+    await relaxLegacyRequiredColumns('feedback_submissions', ['id', 'name', 'email', 'type', 'related_tool', 'message', 'created_at']);
+    await relaxLegacyRequiredColumns('analytics_events', ['id', 'user_id', 'event_name', 'event_group', 'path', 'tool', 'metadata', 'created_at']);
   })();
   return schemaReady;
 };
@@ -505,52 +650,87 @@ const recordAnalyticsEvent = async ({
 
 const countFrom = (rows) => Number(rows?.[0]?.count || 0);
 
+const encryptionConfig = (bucket) => {
+  const config = ENCRYPTION_TABLES[bucket];
+  if (!config) throw Object.assign(new Error('Unknown encryption type'), { status: 404 });
+  return config;
+};
+
+const normalizeEncryptionRow = (row, config, valueColumn) => ({
+  id: row.id,
+  user_id: row.user_id,
+  username: row.username,
+  [config.valueKey]: row[config.valueKey] || row[valueColumn] || '',
+  key_used: row.key_used || KEY_NOT_STORED,
+});
+
 const listEncryption = async (bucket, user) => {
-  const sql = getSql();
-  if (bucket === 'text') {
-    return sql`SELECT id, user_id, username, encrypted_text, key_used FROM text_to_text WHERE user_id = ${user.id} ORDER BY id DESC`;
-  }
-  if (bucket === 'image') {
-    return sql`SELECT id, user_id, username, encrypted_image_link, key_used FROM image_to_image WHERE user_id = ${user.id} ORDER BY id DESC`;
-  }
-  return sql`SELECT id, user_id, username, encrypted_image_link, key_used FROM text_to_image WHERE user_id = ${user.id} ORDER BY id DESC`;
+  const config = encryptionConfig(bucket);
+  const columns = await tableColumns(config.table);
+  const valueColumn = firstExistingColumn(columns, config.valueColumns) || config.valueKey;
+  const rows = await queryRaw(
+    `
+      SELECT
+        id,
+        user_id,
+        username,
+        ${quoteIdentifier(valueColumn)} AS ${quoteIdentifier(config.valueKey)},
+        COALESCE(key_used, $1) AS key_used
+      FROM ${quoteIdentifier(config.table)}
+      WHERE user_id = $2
+      ORDER BY id DESC
+    `,
+    [KEY_NOT_STORED, user.id],
+  );
+  return rows.map((row) => normalizeEncryptionRow(row, config, config.valueKey));
 };
 
 const saveEncryption = async (bucket, user, body) => {
-  const sql = getSql();
-  if (bucket === 'text') {
-    const value = requireText(body.encrypted_text, 'Encrypted text', MAX_TEXT_BYTES);
-    const rows = await sql`
-      INSERT INTO text_to_text (user_id, username, encrypted_text, key_used)
-      VALUES (${user.id}, ${user.username}, ${value}, ${KEY_NOT_STORED})
-      RETURNING id, user_id, username, encrypted_text, key_used
-    `;
-    return rows[0];
+  const config = encryptionConfig(bucket);
+  const value = requireText(body[config.valueKey], config.valueLabel, config.maxBytes);
+  const columns = await tableColumns(config.table);
+  const names = columnSet(columns);
+  const valueColumn = firstExistingColumn(columns, config.valueColumns) || config.valueKey;
+  const insertValues = {
+    user_id: user.id,
+    username: user.username,
+    key_used: KEY_NOT_STORED,
+    [valueColumn]: value,
+    [config.valueKey]: value,
+  };
+
+  for (const column of columns) {
+    if (
+      column.is_nullable === 'NO' &&
+      !column.column_default &&
+      !column.identity_generation &&
+      column.is_generated !== 'ALWAYS' &&
+      insertValues[column.column_name] === undefined
+    ) {
+      insertValues[column.column_name] = legacyFallbackValue(column, value, user);
+    }
   }
 
-  const value = requireText(body.encrypted_image_link, 'Encrypted image', MAX_IMAGE_BYTES);
-  if (bucket === 'image') {
-    const rows = await sql`
-      INSERT INTO image_to_image (user_id, username, encrypted_image_link, key_used)
-      VALUES (${user.id}, ${user.username}, ${value}, ${KEY_NOT_STORED})
-      RETURNING id, user_id, username, encrypted_image_link, key_used
-    `;
-    return rows[0];
-  }
-
-  const rows = await sql`
-    INSERT INTO text_to_image (user_id, username, encrypted_image_link, key_used)
-    VALUES (${user.id}, ${user.username}, ${value}, ${KEY_NOT_STORED})
-    RETURNING id, user_id, username, encrypted_image_link, key_used
-  `;
-  return rows[0];
+  const insertColumns = Object.keys(insertValues).filter((column) => names.has(column) && column !== 'id');
+  const placeholders = insertColumns.map((_, index) => `$${index + 1}`).join(', ');
+  const values = insertColumns.map((column) => insertValues[column]);
+  const rows = await queryRaw(
+    `
+      INSERT INTO ${quoteIdentifier(config.table)} (${insertColumns.map(quoteIdentifier).join(', ')})
+      VALUES (${placeholders})
+      RETURNING *
+    `,
+    values,
+  );
+  return normalizeEncryptionRow(rows[0], config, valueColumn);
 };
 
 const deleteEncryption = async (bucket, user, id) => {
-  const sql = getSql();
-  if (bucket === 'text') return sql`DELETE FROM text_to_text WHERE id = ${id} AND user_id = ${user.id} RETURNING id`;
-  if (bucket === 'image') return sql`DELETE FROM image_to_image WHERE id = ${id} AND user_id = ${user.id} RETURNING id`;
-  return sql`DELETE FROM text_to_image WHERE id = ${id} AND user_id = ${user.id} RETURNING id`;
+  const config = encryptionConfig(bucket);
+  return queryRaw(
+    `DELETE FROM ${quoteIdentifier(config.table)} WHERE id = $1 AND user_id = $2 RETURNING id`,
+    [id, user.id],
+  );
 };
 
 const sendFeedbackEmail = async (record) => {
@@ -903,13 +1083,13 @@ const handleGoogleUser = async (req, path, body) => {
 
 const handleEncryptions = async (req, path, body) => {
   if (req.method === 'GET' && path === '/encryptions/counts') {
-    const sql = getSql();
     const user = await authenticate(req);
-    const [textRows, imageRows, textImageRows] = await Promise.all([
-      sql`SELECT COUNT(*)::INT AS count FROM text_to_text WHERE user_id = ${user.id}`,
-      sql`SELECT COUNT(*)::INT AS count FROM image_to_image WHERE user_id = ${user.id}`,
-      sql`SELECT COUNT(*)::INT AS count FROM text_to_image WHERE user_id = ${user.id}`,
-    ]);
+    const [textRows, imageRows, textImageRows] = await Promise.all(
+      ['text', 'image', 'textimage'].map((bucket) => {
+        const config = encryptionConfig(bucket);
+        return queryRaw(`SELECT COUNT(*) AS count FROM ${quoteIdentifier(config.table)} WHERE user_id = $1`, [user.id]);
+      }),
+    );
     return { text: textRows[0].count, image: imageRows[0].count, textimage: textImageRows[0].count };
   }
 

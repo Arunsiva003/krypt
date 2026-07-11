@@ -162,26 +162,7 @@ const Steganography = () => {
         return;
       }
 
-      const cloudName = process.env.REACT_APP_CLOUDINARY_CLOUD_NAME;
-      const uploadPreset = process.env.REACT_APP_CLOUDINARY_UPLOAD_PRESET;
-      if (!cloudName || !uploadPreset) {
-        notify('Cloudinary environment variables are missing.', 'error');
-        return;
-      }
-
-      const blob = await fetch(encodedImageSrc).then((res) => res.blob());
-      const formData = new FormData();
-      formData.append('file', blob);
-      formData.append('upload_preset', uploadPreset);
-      const cloudinaryResponse = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
-        method: 'POST',
-        body: formData,
-      });
-      const cloudinaryData = await cloudinaryResponse.json();
-      if (!cloudinaryResponse.ok) {
-        throw new Error(cloudinaryData?.error?.message || 'Cloudinary upload failed');
-      }
-      await api.post('/api/rust/textimage', { encrypted_image_link: cloudinaryData.secure_url || cloudinaryData.url });
+      await api.post('/api/rust/textimage', { encrypted_image_link: encodedImageSrc });
       trackToolAction('steganography', 'save');
       notify('Encoded image saved. The passkey was not stored.', 'success');
     } catch (error) {
