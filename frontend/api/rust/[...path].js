@@ -232,6 +232,9 @@ const normalizeLegacyTable = async (tableName, valueColumns = []) => {
 
   if (!names.has('created_at')) {
     await queryRaw(`ALTER TABLE ${quoteIdentifier(tableName)} ADD COLUMN created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()`);
+  } else {
+    await queryRaw(`ALTER TABLE ${quoteIdentifier(tableName)} ALTER COLUMN created_at SET DEFAULT NOW()`);
+    await queryRaw(`UPDATE ${quoteIdentifier(tableName)} SET created_at = NOW() WHERE created_at IS NULL`);
   }
 
   for (const valueColumn of valueColumns) {
@@ -259,6 +262,10 @@ const normalizeLegacyTable = async (tableName, valueColumns = []) => {
 
 const relaxLegacyRequiredColumns = async (tableName, standardColumns) => {
   const columns = await tableColumns(tableName, { refresh: true });
+  if (columns.some((column) => column.column_name === 'created_at')) {
+    await queryRaw(`ALTER TABLE ${quoteIdentifier(tableName)} ALTER COLUMN created_at SET DEFAULT NOW()`);
+    await queryRaw(`UPDATE ${quoteIdentifier(tableName)} SET created_at = NOW() WHERE created_at IS NULL`);
+  }
   for (const column of columns) {
     const generated = column.identity_generation || column.is_generated === 'ALWAYS';
     if (
@@ -271,6 +278,39 @@ const relaxLegacyRequiredColumns = async (tableName, standardColumns) => {
     }
   }
   columnCache.delete(tableName);
+};
+
+const hardenFeedbackTable = async () => {
+  await queryRaw('ALTER TABLE feedback_submissions ADD COLUMN IF NOT EXISTS name TEXT');
+  await queryRaw('ALTER TABLE feedback_submissions ADD COLUMN IF NOT EXISTS email TEXT');
+  await queryRaw("ALTER TABLE feedback_submissions ADD COLUMN IF NOT EXISTS type TEXT NOT NULL DEFAULT 'suggestion'");
+  await queryRaw('ALTER TABLE feedback_submissions ADD COLUMN IF NOT EXISTS related_tool TEXT');
+  await queryRaw('ALTER TABLE feedback_submissions ADD COLUMN IF NOT EXISTS message TEXT');
+  await queryRaw('ALTER TABLE feedback_submissions ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()');
+  await queryRaw("ALTER TABLE feedback_submissions ALTER COLUMN type SET DEFAULT 'suggestion'");
+  await queryRaw('ALTER TABLE feedback_submissions ALTER COLUMN created_at SET DEFAULT NOW()');
+  await queryRaw("UPDATE feedback_submissions SET type = 'suggestion' WHERE type IS NULL");
+  await queryRaw('UPDATE feedback_submissions SET created_at = NOW() WHERE created_at IS NULL');
+  columnCache.delete('feedback_submissions');
+};
+
+const hardenAnalyticsTable = async () => {
+  await queryRaw('ALTER TABLE analytics_events ADD COLUMN IF NOT EXISTS user_id INTEGER');
+  await queryRaw("ALTER TABLE analytics_events ADD COLUMN IF NOT EXISTS event_name TEXT NOT NULL DEFAULT 'event'");
+  await queryRaw("ALTER TABLE analytics_events ADD COLUMN IF NOT EXISTS event_group TEXT NOT NULL DEFAULT 'app'");
+  await queryRaw('ALTER TABLE analytics_events ADD COLUMN IF NOT EXISTS path TEXT');
+  await queryRaw('ALTER TABLE analytics_events ADD COLUMN IF NOT EXISTS tool TEXT');
+  await queryRaw("ALTER TABLE analytics_events ADD COLUMN IF NOT EXISTS metadata JSONB NOT NULL DEFAULT '{}'::jsonb");
+  await queryRaw('ALTER TABLE analytics_events ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()');
+  await queryRaw("ALTER TABLE analytics_events ALTER COLUMN event_name SET DEFAULT 'event'");
+  await queryRaw("ALTER TABLE analytics_events ALTER COLUMN event_group SET DEFAULT 'app'");
+  await queryRaw("ALTER TABLE analytics_events ALTER COLUMN metadata SET DEFAULT '{}'::jsonb");
+  await queryRaw('ALTER TABLE analytics_events ALTER COLUMN created_at SET DEFAULT NOW()');
+  await queryRaw("UPDATE analytics_events SET event_name = 'event' WHERE event_name IS NULL");
+  await queryRaw("UPDATE analytics_events SET event_group = 'app' WHERE event_group IS NULL");
+  await queryRaw("UPDATE analytics_events SET metadata = '{}'::jsonb WHERE metadata IS NULL");
+  await queryRaw('UPDATE analytics_events SET created_at = NOW() WHERE created_at IS NULL');
+  columnCache.delete('analytics_events');
 };
 
 const backfillEncryptionValueColumn = async (config) => {
@@ -400,6 +440,8 @@ const ensureSchema = async () => {
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )
     `;
+    await hardenFeedbackTable();
+    await hardenAnalyticsTable();
     await sql`CREATE INDEX IF NOT EXISTS text_to_text_user_id_idx ON text_to_text (user_id)`;
     await sql`CREATE INDEX IF NOT EXISTS image_to_image_user_id_idx ON image_to_image (user_id)`;
     await sql`CREATE INDEX IF NOT EXISTS text_to_image_user_id_idx ON text_to_image (user_id)`;
@@ -630,14 +672,15 @@ const recordAnalyticsEvent = async ({
 }) => {
   try {
     await getSql()`
-      INSERT INTO analytics_events (user_id, event_name, event_group, path, tool, metadata)
+      INSERT INTO analytics_events (user_id, event_name, event_group, path, tool, metadata, created_at)
       VALUES (
         ${userId ? Number(userId) : null},
         ${analyticsLabel(eventName)},
         ${analyticsLabel(eventGroup, 'app', 40)},
         ${analyticsPath(path)},
         ${tool ? analyticsLabel(tool, 'tool', 80) : null},
-        ${JSON.stringify(sanitizeAnalyticsMetadata(metadata))}::jsonb
+        ${JSON.stringify(sanitizeAnalyticsMetadata(metadata))}::jsonb,
+        ${new Date()}
       )
     `;
   } catch (error) {
@@ -695,6 +738,7 @@ const saveEncryption = async (bucket, user, body) => {
     user_id: user.id,
     username: user.username,
     key_used: KEY_NOT_STORED,
+    created_at: new Date(),
     [valueColumn]: value,
     [config.valueKey]: value,
   };
@@ -1090,7 +1134,7 @@ const handleEncryptions = async (req, path, body) => {
         return queryRaw(`SELECT COUNT(*) AS count FROM ${quoteIdentifier(config.table)} WHERE user_id = $1`, [user.id]);
       }),
     );
-    return { text: textRows[0].count, image: imageRows[0].count, textimage: textImageRows[0].count };
+    return { text: countFrom(textRows), image: countFrom(imageRows), textimage: countFrom(textImageRows) };
   }
 
   const collection = path.match(/^\/(text|image|textimage)(?:\/(\d+))?$/);
@@ -1177,8 +1221,8 @@ const handleFeedback = async (req, path, body) => {
   if (req.method === 'POST') {
     checkRateLimit(req, 'feedback');
     const rows = await sql`
-      INSERT INTO feedback_submissions (name, email, type, related_tool, message)
-      VALUES (${optionalText(body.name, 120)}, ${optionalText(body.email, 320)}, ${optionalText(body.type || 'suggestion', 40)}, ${optionalText(body.related_tool, 80)}, ${requireText(body.message, 'Message', MAX_FEEDBACK_BYTES)})
+      INSERT INTO feedback_submissions (name, email, type, related_tool, message, created_at)
+      VALUES (${optionalText(body.name, 120)}, ${optionalText(body.email, 320)}, ${optionalText(body.type || 'suggestion', 40)}, ${optionalText(body.related_tool, 80)}, ${requireText(body.message, 'Message', MAX_FEEDBACK_BYTES)}, ${new Date()})
       RETURNING id, name, email, type, related_tool, message, created_at
     `;
     const record = rows[0];
