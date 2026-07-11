@@ -1,11 +1,28 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
   <defs>
-    <linearGradient id="krypt-fill" x1="8" y1="6" x2="56" y2="58" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#2dd4bf"/>
-      <stop offset="1" stop-color="#2563eb"/>
+    <linearGradient id="krypt-bg" x1="8" y1="5" x2="56" y2="59" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#081624"/>
+      <stop offset="0.58" stop-color="#06111f"/>
+      <stop offset="1" stop-color="#020617"/>
+    </linearGradient>
+    <linearGradient id="krypt-fold" x1="16" y1="13" x2="30" y2="49" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ffffff"/>
+      <stop offset="0.6" stop-color="#f8fafc"/>
+      <stop offset="1" stop-color="#cbd5e1"/>
+    </linearGradient>
+    <linearGradient id="krypt-accent" x1="25" y1="17" x2="52" y2="48" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#5eead4"/>
+      <stop offset="0.55" stop-color="#14b8a6"/>
+      <stop offset="1" stop-color="#0891b2"/>
+    </linearGradient>
+    <linearGradient id="krypt-shadow" x1="25" y1="30" x2="38" y2="41" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#020617" stop-opacity="0.5"/>
+      <stop offset="1" stop-color="#020617" stop-opacity="0"/>
     </linearGradient>
   </defs>
-  <rect width="64" height="64" rx="14" fill="#07131f"/>
-  <path d="M32 8 51 15v14c0 12.8-7.6 22.2-19 27C20.6 51.2 13 41.8 13 29V15L32 8Z" fill="url(#krypt-fill)"/>
-  <path d="M24 20v24h6v-8.4l3.2-3.2L41 44h7L37.5 28.3 47 20h-7.7L30 28.7V20h-6Z" fill="#f8fafc"/>
+  <rect width="64" height="64" rx="16" fill="url(#krypt-bg)"/>
+  <path d="M16 18.2 26.6 10.6v42.8L16 45.8V18.2Z" fill="url(#krypt-fold)"/>
+  <path d="M26.6 29.3 42.6 13.8h12L36.6 32l18.1 18.2H42.3L26.6 35.1v-5.8Z" fill="url(#krypt-accent)"/>
+  <path d="M26.6 29.3 36.6 32 26.6 35.1v-5.8Z" fill="url(#krypt-shadow)"/>
+  <path d="M16 18.2 26.6 10.6v42.8L16 45.8V18.2Z" fill="none" stroke="#ffffff" stroke-opacity="0.2" stroke-width="0.8"/>
 </svg>

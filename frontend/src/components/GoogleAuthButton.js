@@ -1,5 +1,5 @@
 import React, { useCallback, useContext, useEffect, useRef, useState } from 'react';
-import { Button, Divider, Stack, Typography } from '@mui/material';
+import { Box, Button, Divider, Stack, Typography } from '@mui/material';
 import GoogleIcon from '@mui/icons-material/Google';
 import { useNavigate } from 'react-router-dom';
 import api, { isMockerEnabled } from '../api/client';
@@ -63,7 +63,18 @@ const GoogleAuthButton = ({ label = 'Continue with Google' }) => {
         </Typography>
       </Divider>
       {clientId ? (
-        <div ref={buttonRef} style={{ minHeight: 44, width: '100%' }} />
+        <Box
+          ref={buttonRef}
+          sx={{
+            minHeight: 44,
+            width: '100%',
+            display: 'flex',
+            justifyContent: 'center',
+            '& > div': {
+              marginInline: 'auto',
+            },
+          }}
+        />
       ) : (
         <Button
           fullWidth
